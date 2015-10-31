@@ -1,0 +1,55 @@
+####################
+########### CONFIG #
+####################
+# is this pet enabled or not? use 'yes' to enable
+USED=no
+# using 'yes' will enable this pet during boot (no tty)
+BOOT=yes
+# target path for final fs ?
+TARG=/home/mail
+# ramfs or tmpfs? default = tmpfs (tip: ramfs does not SWAP!)
+TYPE=ramfs
+# size, in MB!! default = 512
+SIZE=120
+# target path permissions ? default = root:root / 0644
+COWN=mail:mail
+CMOD=0700
+# `mount` options. derp! warning; tmpfs cant do data options
+MOPT="-o noatime"
+####################
+########## PERSIST #
+####################
+# where are the ramdisk archives stored?? default = /etc/pets/store
+STOR=/root/crypto/petstore
+# how many archives to retain?
+KEEP=10
+# tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
+TOPT="--exclude=/home/mail/dump/* --exclude=/home/mail/lost+found"
+####################
+########## ENCRYPT #
+####################
+# do we want an encrypted fs?. use 'yes' to enable
+ENCR=yes
+# additional parity with badblocks. use 'yes' to enable
+PARI=yes
+# which regular filesystem to use? as needed by `mkfs.*` ie. reiser4, xfs or ext4
+FSFS=reiserfs
+# additional fs options. switches vary between fs..
+FOPT="-q -l hardpet"
+# cryptsetup options. default cipher is aes-cbc-essiv:sha256.
+COPT="-y -o 123 -d /dev/urandom"
+####################
+######### ADVANCED #
+####################
+#
+# supplementary mounts. mounted left to right, dismounted right to left
+#MNTC="/dev/vdb1:/home/mail/stuff /dev/vdb2:/home/mail/stuff/other /dev/vdb3:/home/mail/place"
+#
+# each item issued /etc/init.d/ITEM {restart|stop}. restarted left to right, stopped right to left
+#SRVC="maildaemon otherservice"
+#
+####################
+########### ENDCFG #
+####################
+
+

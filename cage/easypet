@@ -1,0 +1,32 @@
+####################
+########### CONFIG #
+####################
+# is this pet enabled or not? use 'yes' to enable
+USED=no
+# using 'yes' will enable this pet during boot (no tty)
+BOOT=yes
+# target path for final fs ?
+TARG=/root/zoo
+# ramfs or tmpfs? default = tmpfs (tip: ramfs does not SWAP!)
+TYPE=tmpfs
+# size, in MB!! default = 512
+SIZE=2000
+# target path permissions ? default = root:root / 0644
+COWN=mail:mail
+CMOD=0700
+# `mount` options. derp! warning; tmpfs cant do data options
+MOPT="-o noatime"
+####################
+########## PERSIST #
+####################
+# where are the ramdisk archives stored?? default = /etc/pets/store
+STOR=/etc/pets/store
+# how many archives to retain?
+KEEP=10
+# tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
+TOPT="--exclude=/root/zoo/path/* --exclude=/root/zoo/lost+found"
+####################
+########### ENDCFG #
+####################
+
+

@@ -1,0 +1,14 @@
+####################
+########### CONFIG #
+####################
+# is this pet enabled or not? use 'yes' to enable
+USED=no
+# using 'yes' will enable this pet during boot (no tty)
+BOOT=yes
+# target path for final fs ?
+TARG=/root/bare
+####################
+########### ENDCFG #
+####################
+
+
