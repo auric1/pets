@@ -133,9 +133,9 @@ listroutine() {
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
 		if [ -z "$(echo "$ITEM" | tr -d "[:alnum:]")" ] ;then
-			if [ -r "$FILE" ] && [ ! -z $(grep -q "^USED=yes" $FILE) ] ;then
+			if [ -r "$FILE" ] && [ ! -z $(grep "^USED=yes" $FILE) ] ;then
 					dbg list.2 -
-				if [ ! -t 0 ] && [ -z $(grep -q "^BOOT=yes" $FILE) ] ;then
+				if [ ! -t 0 ] && [ -z $(grep "^BOOT=yes" $FILE) ] ;then
 					printroutine 14 "$FILE"
 				else
 					LIST="$LIST $ITEM"
