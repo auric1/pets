@@ -277,6 +277,7 @@ syncroutine() {
 				if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then
 					KEEP=1
 				fi
+				if [ ! -d $STOR ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
 				KEEP=$((KEEP+1))
 				ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
 				tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
