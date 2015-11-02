@@ -1,11 +1,21 @@
 #! /bin/sh
 # hm..do something with this stuff
-VERS=0.4.6
+VERS=0.4.7
 CAGE=/etc/pets/cage
-DEBG=0
+DEBG=log
 
 dbg() { if [ $DEBG = 1 ] ;then
-	printroutine debug: "$@"
+		printroutine debug: "$@"
+	elif [ $DEBG = log ] ;then LOGD=/etc/pets/log;LOGF=$LOGD/pets.log
+		if [ ! -d $LOGD ] || [ ! -r $LOGF ] ;then mkdir $LOGD;touch $LOGF ;fi
+		if [ "$(wc -l $LOGF|awk '{ print $1 }')" -gt 1000 ] ;then
+			LOGN="$(find $LOGD -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
+			LOGN="${LOGN:-0}"
+			LOGN="$((LOGN+1))"
+			mv $LOGF "$LOGF.$LOGN"
+			touch $LOGF
+		fi
+		echo "$(date +"%b %d %T")" "$@" >> $LOGF
 	fi
 }
 
@@ -271,7 +281,7 @@ syncroutine() {
 				ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
 				tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
 				printf '\n'
-				dbg sync.5 "$STOR,$NAME,$KEEP"
+				dbg sync.5 "$STOR,$NAME,$KEEP,$ARCH"
 				find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*"|sort -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
 				ARCH=""
 			else

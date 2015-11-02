@@ -22,7 +22,7 @@ MOPT="-o noatime"
 # where are the ramdisk archives stored?? default = /etc/pets/store
 STOR=/etc/pets/store
 # how many archives to retain?
-KEEP=10
+KEEP=5
 # tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
 TOPT="--exclude=/root/zoo/path/* --exclude=/root/zoo/lost+found"
 ####################
