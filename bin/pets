@@ -1,8 +1,8 @@
 #! /bin/sh
 # hm..do something with this stuff
-VERS=0.4.7
+VERS=0.4.8
 CAGE=/etc/pets/cage
-DEBG=log
+DEBG=0
 
 dbg() { if [ $DEBG = 1 ] ;then
 		printroutine debug: "$@"
