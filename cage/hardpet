@@ -36,8 +36,8 @@ PARI=yes
 FSFS=reiserfs
 # additional fs options. switches vary between fs..
 FOPT="-q -l hardpet"
-# cryptsetup options. default cipher is aes-cbc-essiv:sha256.
-COPT="-y -o 123 -d /dev/urandom"
+# cryptsetup options. randomized via /dev/urandom. default cipher: aes-cbc-essiv:sha256
+COPT="-o 123 -s 128 -c twofish-xts-plain64"
 ####################
 ######### ADVANCED #
 ####################
@@ -51,5 +51,3 @@ COPT="-y -o 123 -d /dev/urandom"
 ####################
 ########### ENDCFG #
 ####################
-
-
