@@ -28,5 +28,3 @@ TOPT="--exclude=/root/zoo/path/* --exclude=/root/zoo/lost+found"
 ####################
 ########### ENDCFG #
 ####################
-
-

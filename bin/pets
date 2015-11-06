@@ -1,6 +1,6 @@
 #! /bin/sh
 # hm..do something with this stuff
-VERS=0.4.8
+VERS=0.4.9
 CAGE=/etc/pets/cage
 DEBG=0
 
@@ -13,33 +13,22 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 			mv $LOGF "$LOGF.$LOGN";touch $LOGF
 		fi
 		echo "$(date +"%b %d %T")" "$@" >> $LOGF
+		printroutine debug: "$@"
 	fi
 }
 
-advancedroutine() {
-	dbg adv.1 -
-	if [ "$1" = "restart" ] ;then
-		dbg adv.2 -
-		if [ "$MNTC" ] ;then
-			advmntcroutine mount "$MNTC"
-		fi
-		if [ "$SRVC" ] ;then
-			advsrvcroutine "$1"
-		fi
+advancedroutine() { dbg adv.1 -
+	if [ "$1" = "restart" ] ;then dbg adv.2 -
+		if [ "$MNTC" ] ;then advmntcroutine mount "$MNTC" ;fi
+		if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
 	fi
-	if [ "$1" = "stop" ] ;then
-		dbg adv.3 -
-		if [ "$SRVC" ] ;then
-			advsrvcroutine "$1"
-		fi
-		if [ "$MNTC" ] ;then
-			advmntcroutine umount "$MNTC"
-		fi
+	if [ "$1" = "stop" ] ;then dbg adv.3 -
+		if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
+		if [ "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi
 	fi
 }
 
-advmntcroutine() {
-	ARGS=$(echo "$@"|cut -f 2- -d " ")
+advmntcroutine() { ARGS=$(echo "$@"|cut -f 2- -d " ")
 	if [ "$1" = "umount" ] ;then
 		ACTN=dismounting
 		if [ "$(echo "$ARGS"|wc -w)" -gt 1 ] ;then
@@ -83,8 +72,7 @@ newpetroutine() {
 	fi
 }
 
-startroutine() {
-	dbg start.1 "$1"
+startroutine() { dbg start.1 "$1"
 	if [ ! "$1" ] ;then
 		listroutine
 		dbg start.8 -
@@ -140,9 +128,9 @@ listroutine() {
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
 		if [ -z "$(echo "$ITEM" | tr -d "[:alnum:]")" ] ;then
-			if [ -r "$FILE" ] && [ ! -z $(grep "^USED=yes" $FILE) ] ;then
+			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then
 					dbg list.2 -
-				if [ ! -t 0 ] && [ -z $(grep "^BOOT=yes" $FILE) ] ;then
+				if [ ! -t 0 ] && ! grep -q ^BOOT=yes "$FILE" ;then
 					printroutine 14 "$FILE"
 				else
 					LIST="$LIST $ITEM"
@@ -155,7 +143,10 @@ listroutine() {
 		LIST="none!"
 		printroutine 11
 	elif [ "$1" = "display" ] ;then
-		printroutine 11
+		if [ $2 ] ;then SHOW="$CAGE/$2"
+			if [ -r "$SHOW" ] ;then cat $SHOW;SHOW=""
+			else printroutine 13 "$2" ;fi
+		else printroutine 11 ;fi
 	fi
 }
 
@@ -292,43 +283,22 @@ syncroutine() {
 chk1routine() {
 	CHK1=$(find $TARG -maxdepth 1 -not -path "$TARG/lost+found"|wc -l) >/dev/null 2>&1
 	dbg chk1.1 "$TARG,$CHK1"
-        if [ "$CHK1" -gt 1 ] ;then
-		return 0
-		dbg chk1.2 "$CHK1"
-        else
-		return 1
-		dbg chk1.3 "$CHK1"
-	fi
+        if [ "$CHK1" -gt 1 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
 
 chk2routine() {
-	dbg chk2.1 "$TARG"
 	CHK2=$(mount|grep " $TARG "|awk '{print $3}') >/dev/null 2>&1
-	if [ -n "$CHK2" ] ;then
-		return 0
-		dbg chk2.2 "$CHK2"
-	else
-		return 1
-		dbg chk2.3 "$CHK2"
-	fi
+	dbg chk2.1 "$TARG,$CHK2"
+	if [ -n "$CHK2" ] ;then return 0;dbg chk2.2 "$CHK2" ;else return 1;dbg chk2.3 "$CHK2" ;fi
 }
 
 printroutine() {
         if [ -t 0 ] ;then
-		NO="[ $(tput setaf 1)no $(tput sgr 0)]"
-		OK="[ $(tput setaf 2)ok $(tput sgr 0)]"
-                HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
-		GR="$(tput setaf 2).$(tput sgr 0)"
-		RD="$(tput setaf 1).$(tput sgr 0)"
-        else
-		NO="[ no ]"
-		OK="[ ok ]"
-		HM="[ ?? ]"
-		GR="."
-		RD="."
-	fi
+		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
+		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
+        else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
         case "$1" in
-	        0)	echo "$HM" 'u wot m8 ?? try: pets {list|start|stop|sync}' ;;
+	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
 	        1)	echo "$OK" 'Starting Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
 	        2)	echo "$NO" '('$TARG')' 'this path already has a pets things in it'${RD}${RD} ;;
 	        3)	echo "$OK" '('$TARG')' 'pet syncing from archive'${GR}${GR} ;;
@@ -350,8 +320,7 @@ printroutine() {
 	esac
 }
 
-pidroutine() {
-	PID="$1"
+pidroutine() { PID="$1"
 	while kill -0 "$PID" 2> /dev/null; do
 		rotating "$2"
 		sleep 1
@@ -371,7 +340,7 @@ case "$1" in
 	start)		startroutine "$2";;
 	stop)		syncroutine "$2";stoproutine "$2";;
 	sync)		syncroutine "$2";;
-	list)		listroutine display;;
+	list)		listroutine display "$2";;
 	*)		printroutine 0;exit 1;;
 esac
 

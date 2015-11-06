@@ -6,5 +6,5 @@ if [ "$(uname -s)" = "Linux" ] ;then
 	if [ -r "$LINK" ] ;then unlink "$LINK" ;fi
 	ln -sfv "$PETS" "$LINK"
 	if [ -r "$INIT" ] ;then rm -rfv "$INIT" ;fi
-	cp -av /etc/pets/init/pets "$INIT"
+	cp -av /etc/pets/doc/pets.init "$INIT"
 fi

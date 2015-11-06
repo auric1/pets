@@ -1,4 +1,4 @@
 # PETS
 Persistent Encryptable TMPFS Server for Linux
 
-clone in to /etc or fail
+clone in to /etc/pets/ or fail
