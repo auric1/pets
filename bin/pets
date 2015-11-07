@@ -41,8 +41,8 @@ revroutine() {
 advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 	if [ "$1" = "umount" ] ;then ACTN=dismounting;ARGS="$(revroutine "$ARGS")" ;fi
 	for ITEM in $ARGS ;do
-		DEVC=$(echo "$ITEM"|awk -F'^' '{ print $1 }')
-		DIRC=$(echo "$ITEM"|awk -F'^' '{ print $2 }')
+		DEVC=$(echo "$ITEM"|awk -F':' '{ print $1 }')
+		DIRC=$(echo "$ITEM"|awk -F':' '{ print $2 }')
 		dbg adv.mnt.1 "$ARGS,$ITEM,$DEVC,$DIRC"
 		if [ -b "$DEVC" ] && [ -d "$DIRC" ] ;then
 			printroutine 18 "$ACTN" "$DIRC" "$DEVC"
