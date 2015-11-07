@@ -2,8 +2,6 @@
 
 -add (more) protections vs bad vars @ pet cfg ***WIP***
 
--change all `which` refs to `command -v` for POSIX compat 
-
 -calc/report time of sync/generate/randomize cycles
 
 -

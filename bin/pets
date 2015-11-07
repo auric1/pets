@@ -32,25 +32,28 @@ advancedroutine() {
 	esac
 }
 
-advmntcroutine() { ARGS=$(echo "$@"|cut -f 2- -d " ")
-	if [ "$1" = "umount" ] ;then ACTN=dismounting
-		if [ "$(echo "$ARGS"|wc -w)" -gt 1 ] ;then
-			ARGS=$(echo "$ARGS"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')
-		fi
-	else	ACTN=mounting
-	fi
+revroutine() {
+	if [ "$(echo "$@"|wc -w)" -gt 1 ] ;then
+		OUTP="$(echo "$@"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')";echo "$OUTP"
+	else echo "$OUTP" ;fi;OUTP=""
+}
+
+advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
+	if [ "$1" = "umount" ] ;then ACTN=dismounting;ARGS="$(revroutine "$ARGS")" ;fi
 	for ITEM in $ARGS ;do
-		DEVC=$(echo "$ITEM"|awk -F':' '{ print $1 }')
-		DIRC=$(echo "$ITEM"|awk -F':' '{ print $2 }')
+		DEVC=$(echo "$ITEM"|awk -F'^' '{ print $1 }')
+		DIRC=$(echo "$ITEM"|awk -F'^' '{ print $2 }')
 		dbg adv.mnt.1 "$ARGS,$ITEM,$DEVC,$DIRC"
 		if [ -b "$DEVC" ] && [ -d "$DIRC" ] ;then
 			printroutine 18 "$ACTN" "$DIRC" "$DEVC"
 			"$1" "$DEVC" "$DIRC" >/dev/null 2>&1
 		fi
 	done
+	ARGS=""
 }
 
 advsrvcroutine() {
+	if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
 	for ITEM in $SRVC ;do
 		dbg srvc.1 "$NAME,$SRVC,$ITEM"
 		if [ -x /etc/init.d/"$ITEM" ] ;then
@@ -62,8 +65,9 @@ advsrvcroutine() {
 newpetroutine() {
 	CONF="$PETD"/"$1"
 	TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
-	dbg newp.1 "$CONF,$TGRT"
+	dbg newp.1 "$CONF,$TRGT"
 	if [ -r "$CONF" ] && [ -n "$TRGT" ] ;then
+
 		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$STRD"
 		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
 		. "$CONF";NAME="$1"
@@ -76,30 +80,22 @@ newpetroutine() {
 }
 
 startroutine() { dbg start.1 "$1"
-	if [ ! "$1" ] ;then
-		listroutine
-		dbg start.8 -
-	else
-		LIST="$1"
-		dbg start.9 "$1"
+	if [ ! "$1" ] ;then listroutine;dbg start.8 -
+	else LIST="$1";dbg start.9 "$1"
 	fi
 	printroutine 1
 	for i in $LIST ;do
 		newpetroutine "$i"
-		dbg start.3 "$i"
 		if [ $NAME ] ;then
-			if chk1routine ;then
-				printroutine 2
-				dbg start.4 -
+			if chk1routine ;then printroutine 2
 			elif ! chk2routine ;then
-				mountroutine
-				dbg start.7 "$i,$TARG,$STOR,$NAME"
+				mountroutine;dbg start.7 "$i,$TARG,$STOR,$NAME"
 				if chk2routine ;then
 					if [ ! -d $STOR ] ;then
 						mkdir -p $STOR
 						chmod 0700 $STOR
 					else
-						ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1) >/dev/null 2>&1
+						ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
 						dbg start.5 "$ARCH"
 						if [ -r "$ARCH" ] ;then
 							printroutine 3
@@ -121,7 +117,7 @@ startroutine() { dbg start.1 "$1"
 }
 
 listroutine() {
-	if [ ! "$(which lzop)" ] ;then
+	if [ ! "$(command -v lzop)" ] ;then
 		printroutine 15 lzop
 		exit 1
 	fi
@@ -147,7 +143,7 @@ listroutine() {
 		printroutine 11
 	elif [ "$1" = "display" ] ;then
 		if [ "$2" ] ;then SHOW="$PETD/$2"
-			if [ -r "$SHOW" ] ;then cat "$SHOW";SHOW=""
+			if [ -r "$SHOW" ] ;then grep -v '^$\|^#' "$SHOW";SHOW=""
 			else printroutine 13 "$2" ;fi
 		else printroutine 11 ;fi
 	fi
@@ -158,8 +154,8 @@ mountroutine() {
 	mkdir -p $TARG
 	dbg mnt.1 "$NAME,$TARG"
 	if [ $ENCR = yes ] ;then
-		if [ ! "$(which mkfs.$FSFS)" ] ;then printroutine 15 "mkfs.$FSFS"
-		elif [ ! "$(which cryptsetup)" ] ;then printroutine 15 cryptsetup
+		if [ ! "$(command -v mkfs.$FSFS)" ] ;then printroutine 15 "mkfs.$FSFS"
+		elif [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
 		else
 			PTAH=$RAMD/$NAME
 			mkdir -p $PTAH
@@ -194,10 +190,9 @@ mountroutine() {
 
 
 stoproutine() {
-	if [ ! "$1" ] ;then listroutine
-		if [ "$(echo $LIST|wc -w)" -gt 1 ] ;then
-			LIST=$(echo $LIST|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')
-		fi
+	if [ ! "$1" ] ;then
+		listroutine
+		LIST="$(revroutine "$LIST")"
 		dbg stop.1 "$LIST"
 	else
 		LIST=$1
@@ -207,7 +202,7 @@ stoproutine() {
 		newpetroutine "$i"
 		if [ $NAME ] ;then
 			PTAH=$RAMD/$NAME
-			dbg stop.3 "$NAME,$SRVC"
+			dbg stop.3 "$NAME"
 			unmountroutine
 		fi
 	done
