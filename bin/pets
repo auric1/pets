@@ -57,13 +57,13 @@ advsrvcroutine() {
 }
 
 newpetroutine() {
-	TEST="$CAGE"/"$1"
-	TRGT="$(grep ^TARG= "$TEST"|awk -F"=" '{ print $2 }'|grep "^/")"
-	dbg newp.1 "$TEST"
-	if [ -r "$TEST" ] && [ -n "$TRGT" ] ;then
+	CONF="$CAGE"/"$1"
+	TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
+	dbg newp.1 "$CONF"
+	if [ -r "$CONF" ] && [ -n "$TRGT" ] ;then
 		USED="";BOOT="";TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="/etc/pets/store"
 		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
-		. "$TEST";NAME="$1"
+		. "$CONF";NAME="$1"
 		dbg newp.2 "$NAME"
 	else
 		NAME=""
@@ -143,8 +143,8 @@ listroutine() {
 		LIST="none!"
 		printroutine 11
 	elif [ "$1" = "display" ] ;then
-		if [ $2 ] ;then SHOW="$CAGE/$2"
-			if [ -r "$SHOW" ] ;then cat $SHOW;SHOW=""
+		if [ "$2" ] ;then SHOW="$CAGE/$2"
+			if [ -r "$SHOW" ] ;then cat "$SHOW";SHOW=""
 			else printroutine 13 "$2" ;fi
 		else printroutine 11 ;fi
 	fi

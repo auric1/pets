@@ -2,7 +2,7 @@
 ########### CONFIG #
 ####################
 # is this pet enabled or not? use 'yes' to enable
-USED=no
+USED=yes
 # using 'yes' will enable this pet during boot (no tty)
 BOOT=yes
 # target path for final fs ?
@@ -37,7 +37,7 @@ FSFS=reiserfs
 # additional fs options. switches vary between fs..
 FOPT="-q -l hardpet"
 # cryptsetup options. randomized via /dev/urandom. default cipher: aes-cbc-essiv:sha256
-COPT="-o 123 -s 128 -c twofish-xts-plain64"
+COPT="-o 123 -s 512 -c twofish-xts-plain64"
 ####################
 ######### ADVANCED #
 ####################
