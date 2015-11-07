@@ -1,8 +1,13 @@
 #! /bin/sh
-# hm..do something with this stuff
-VERS=0.4.9
-CAGE=/etc/pets/cage
+# version 0.5.0
+#
+# debug {*|1|log}
 DEBG=0
+#
+# default paths. do not alter!
+PETD=/etc/pets/cage
+STRD=/etc/pets/store
+RAMD=/mnt/ram
 
 dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 	elif [ $DEBG = log ] ;then LOGD=/etc/pets/log;LOGF=$LOGD/pets.log
@@ -13,24 +18,22 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 			mv $LOGF "$LOGF.$LOGN";touch $LOGF
 		fi
 		echo "$(date +"%b %d %T")" "$@" >> $LOGF
-		printroutine debug: "$@"
 	fi
 }
 
-advancedroutine() { dbg adv.1 -
-	if [ "$1" = "restart" ] ;then dbg adv.2 -
-		if [ "$MNTC" ] ;then advmntcroutine mount "$MNTC" ;fi
-		if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
-	fi
-	if [ "$1" = "stop" ] ;then dbg adv.3 -
-		if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
-		if [ "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi
-	fi
+advancedroutine() {
+	case "$1" in
+		restart) dbg adv.1 "$1"
+			if [ "$MNTC" ] ;then advmntcroutine mount "$MNTC" ;fi
+			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi ;;
+		stop) dbg adv.2 "$1"
+			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
+			if [ "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi ;;
+	esac
 }
 
 advmntcroutine() { ARGS=$(echo "$@"|cut -f 2- -d " ")
-	if [ "$1" = "umount" ] ;then
-		ACTN=dismounting
+	if [ "$1" = "umount" ] ;then ACTN=dismounting
 		if [ "$(echo "$ARGS"|wc -w)" -gt 1 ] ;then
 			ARGS=$(echo "$ARGS"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')
 		fi
@@ -57,11 +60,11 @@ advsrvcroutine() {
 }
 
 newpetroutine() {
-	CONF="$CAGE"/"$1"
+	CONF="$PETD"/"$1"
 	TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
-	dbg newp.1 "$CONF"
+	dbg newp.1 "$CONF,$TGRT"
 	if [ -r "$CONF" ] && [ -n "$TRGT" ] ;then
-		USED="";BOOT="";TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="/etc/pets/store"
+		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$STRD"
 		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
 		. "$CONF";NAME="$1"
 		dbg newp.2 "$NAME"
@@ -96,7 +99,7 @@ startroutine() { dbg start.1 "$1"
 						mkdir -p $STOR
 						chmod 0700 $STOR
 					else
-						ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*"|head -n1) >/dev/null 2>&1
+						ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1) >/dev/null 2>&1
 						dbg start.5 "$ARCH"
 						if [ -r "$ARCH" ] ;then
 							printroutine 3
@@ -123,7 +126,7 @@ listroutine() {
 		exit 1
 	fi
 	LIST=""
-	TLST=$(find $CAGE -maxdepth 1 -type f -not -path "$CAGE/.*" -not -path "* *")
+	TLST=$(find $PETD -maxdepth 1 -type f -not -path "$PETD/.*" -not -path "* *")
 	for FILE in $TLST ;do
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
@@ -143,7 +146,7 @@ listroutine() {
 		LIST="none!"
 		printroutine 11
 	elif [ "$1" = "display" ] ;then
-		if [ "$2" ] ;then SHOW="$CAGE/$2"
+		if [ "$2" ] ;then SHOW="$PETD/$2"
 			if [ -r "$SHOW" ] ;then cat "$SHOW";SHOW=""
 			else printroutine 13 "$2" ;fi
 		else printroutine 11 ;fi
@@ -155,12 +158,10 @@ mountroutine() {
 	mkdir -p $TARG
 	dbg mnt.1 "$NAME,$TARG"
 	if [ $ENCR = yes ] ;then
-		if [ ! "$(which mkfs.$FSFS)" ] ;then
-			printroutine 15 "mkfs.$FSFS"
-		elif [ ! "$(which cryptsetup)" ] ;then
-			printroutine 15 cryptsetup
+		if [ ! "$(which mkfs.$FSFS)" ] ;then printroutine 15 "mkfs.$FSFS"
+		elif [ ! "$(which cryptsetup)" ] ;then printroutine 15 cryptsetup
 		else
-			PTAH=/mnt/ram/$NAME
+			PTAH=$RAMD/$NAME
 			mkdir -p $PTAH
 			dbg mnt.2 $NAME,$PTAH
 			mount -t $TYPE pets $PTAH -o size=${SIZE}M
@@ -173,21 +174,19 @@ mountroutine() {
 			cryptsetup status $NAME
 			printf "\n"
 			dbg mnt.4 "$LOOP,$PTAH,$NAME,$COPT"
-			if [ $PARI = yes ] ;then
-				printroutine 17
+			if [ $PARI = yes ] ;then printroutine 17
 				badblocks -swt random /dev/mapper/$NAME >/dev/null 2>&1 & pidroutine "$!" generating
 				printf '\n'
-				dbg mnt.6 -
 			fi
+			dbg mnt.7 "$FOPT,$MOPT"
 			mkfs.$FSFS $FOPT /dev/mapper/$NAME >/dev/null 2>&1
 			mount -t $FSFS $MOPT /dev/mapper/$NAME $TARG
-			dbg mnt.7 $FOPT,$MOPT
 		fi
 	else
 		mount -t $TYPE pets $TARG -o size=${SIZE}M $MOPT
 		dbg mnt.8 $TYPE,$TARG,$SIZE,$MOPT
 	fi
-	if chk2routine ;then
+	if chk2routine ;then dbg mnt.9 "$COWN,$CMOD,$TARG"
 		chown $COWN $TARG
 		chmod $CMOD $TARG
 	fi
@@ -207,7 +206,7 @@ stoproutine() {
 	for i in $LIST ;do
 		newpetroutine "$i"
 		if [ $NAME ] ;then
-			PTAH=/mnt/ram/$NAME
+			PTAH=$RAMD/$NAME
 			dbg stop.3 "$NAME,$SRVC"
 			unmountroutine
 		fi
@@ -222,15 +221,10 @@ unmountroutine() {
 		if [ "$ENCR" = yes ] ;then
 			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
 			dbg umnt.3 "$LOOP"
-			if [ -n "$LOOP" ] ;then
-				cryptsetup remove $NAME
-				if [ -n "cryptsetup status $NAME|grep $LOOP" ] ;then
-					printroutine 7
-				fi
+			if [ -n "$LOOP" ] ;then cryptsetup remove $NAME
+				if [ -n "cryptsetup status $NAME|grep $LOOP" ] ;then printroutine 7 ;fi
 				losetup -d "$LOOP"
-				if [ -n "losetup --show $LOOP|grep $PTAH" ] ;then
-					printroutine 8
-				fi
+				if [ -n "losetup --show $LOOP|grep $PTAH" ] ;then Printroutine 8 ;fi
 			fi
 			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
 			dbg umnt.6 "$UMNT"
@@ -259,19 +253,16 @@ syncroutine() {
 		dbg sync.3 "$i,$NAME"
 		if [ "$NAME" ] ;then
 			dbg sync.4 "$NAME"
-			if chk1routine ;then
-				printroutine 5
+			if chk1routine ;then printroutine 5
 				DATE=$(date +"%Hh%Mm%Ss-%m.%d.%Y")
-				if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then
-					KEEP=1
-				fi
+				if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then KEEP=1 ;fi
 				if [ ! -d $STOR ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
 				KEEP=$((KEEP+1))
 				ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
 				tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
 				printf '\n'
 				dbg sync.5 "$STOR,$NAME,$KEEP,$ARCH"
-				find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*"|sort -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
+				find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
 				ARCH=""
 			else
 				printroutine 9 sync
@@ -301,9 +292,9 @@ printroutine() {
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
 	        1)	echo "$OK" 'Starting Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
 	        2)	echo "$NO" '('$TARG')' 'this path already has a pets things in it'${RD}${RD} ;;
-	        3)	echo "$OK" '('$TARG')' 'pet syncing from archive'${GR}${GR} ;;
+	        3)	echo "$OK" '('$TARG')' 'syncing files: archive -> pet'${GR}${GR} ;;
 	        4)	echo "$OK" '('$TARG')' 'completed!'${GR}${GR} ;;
-	        5)	echo "$OK" '('$TARG')' 'syncing files from pet to archive'${GR}${GR} ;;
+	        5)	echo "$OK" '('$TARG')' 'syncing files: pet -> archive'${GR}${GR} ;;
 	        6)	echo "$OK" '('$TARG')' 'mounting as:' $TYPE'. going to work'${GR}${GR} ;;
 	        7)	echo "$OK" '('$TARG')' 'removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
@@ -320,10 +311,9 @@ printroutine() {
 	esac
 }
 
-pidroutine() { PID="$1"
-	while kill -0 "$PID" 2> /dev/null; do
-		rotating "$2"
-		sleep 1
+pidroutine() {
+	while kill -0 "$1" 2> /dev/null; do
+		rotating "$2";sleep 1
 	done
 }
 
@@ -341,6 +331,6 @@ case "$1" in
 	stop)		syncroutine "$2";stoproutine "$2";;
 	sync)		syncroutine "$2";;
 	list)		listroutine display "$2";;
-	*)		printroutine 0;exit 1;;
+	*)		printroutine 0;exit;;
 esac
 
