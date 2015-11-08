@@ -10,18 +10,18 @@ TARG=/root/zoo
 # ramfs or tmpfs? default = tmpfs (tip: ramfs does not SWAP!)
 TYPE=tmpfs
 # size, in MB!! default = 512
-SIZE=2000
+SIZE=200
 # target path permissions ? default = root:root / 0644
-COWN=mail:mail
+COWN=root:root
 CMOD=0700
-# `mount` options. derp! warning; tmpfs cant do data options
+# additional mount options. ***!must include the -o switch ***!*** ramfs can not do data options!***
 MOPT="-o noatime"
 ####################
 ########## PERSIST #
 ####################
 # where are the ramdisk archives stored?? default = /etc/pets/store
 STOR=/etc/pets/store
-# how many archives to retain?
+# how many archives to retain? default = 1
 KEEP=5
 # tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
 TOPT="--exclude=/root/zoo/path/* --exclude=/root/zoo/lost+found"

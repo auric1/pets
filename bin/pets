@@ -21,6 +21,171 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 	fi
 }
 
+revroutine() { echo "$@"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }' ;}
+
+listroutine() { LIST=""
+	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
+	if [ -n "$TLST" ] ;then TLST="$(find $PETD -maxdepth 1 -type f -name "$TLST" -not -path "$PETD/.*" -not -path "* *")"
+	else TLST="$(find $PETD -maxdepth 1 -type f -not -path "$PETD/.*" -not -path "* *"|sort)"
+	fi
+	for FILE in $TLST ;do
+		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
+		dbg list.1 "$FILE,$ITEM"
+		if [ -z "$(echo "$ITEM" | tr -d "[:alnum:]")" ] ;then
+			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 -
+				if [ ! -t 0 ] && ! grep -q ^BOOT=yes "$FILE" ;then
+					printroutine 14 "$FILE"
+				else
+					LIST="$LIST $ITEM"
+					dbg list.4 "$ITEM,$LIST"
+				fi
+			fi
+		fi
+	done
+	LIST="${LIST:-none!}"
+	if [ "$1" = "display" ] ;then
+		if [ "$2" ] ;then SHOW="$PETD/$2"
+			if [ -r "$SHOW" ] ;then grep -v '^$\|^#' "$SHOW";SHOW=""
+			else printroutine 13 "$2" ;fi
+		else printroutine 11 ;fi
+	fi
+	if [ "$LIST" != "none!" ] ;then return 0
+	else return 1 ;fi
+}
+
+startroutine() { dbg start.1 "$1";TLST="$1"
+	if listroutine ;then printroutine 1
+		for i in $LIST ;do newpetroutine "$i"
+			if [ "$NAME" ] ;then
+				if chk1routine ;then printroutine 2
+				elif ! chk2routine ;then mountroutine
+					if chk2routine ;then dbg start.2 "$i,$TARG,$STOR,$NAME"
+						if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR"
+						else	ARCH=$(find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
+							dbg start.3 "$ARCH"
+							if [ -r "$ARCH" ] ;then	printroutine 3
+								tar --absolute-names --lzop -xf "$ARCH" -C "$TARG" >/dev/null 2>&1 & pidroutine "$!" synchronizing
+								printf "\n"
+								advancedroutine restart
+								printroutine 4
+					 		else
+								printroutine 10
+							fi
+							ARCH=""
+						fi
+					fi
+				else printroutine 16
+				fi
+			fi
+		done
+	elif [ "$1" ] ;then printroutine 13 "$1"
+	else printroutine 11
+	fi
+}
+
+syncroutine() { TLST="$1"
+	if listroutine ;then dbg sync.1 "$LIST"
+		for i in $LIST ;do newpetroutine "$i"
+			if [ "$NAME" ] ;then dbg sync.2 "$NAME"
+				if chk1routine ;then printroutine 5
+					DATE=$(date +"%Hh%Mm%Ss-%m.%d.%Y")
+					if [ -z "$KEEP" ] || [ "$KEEP" -eq 0 ] ;then KEEP=1 ;fi
+					if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
+					KEEP=$((KEEP+1))
+					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
+					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" "$TARG"/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
+					printf "\n"
+					dbg sync.3 "$STOR,$NAME,$KEEP,$ARCH"
+					find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
+					ARCH=""
+				else printroutine 9 sync
+				fi
+			fi
+		done
+	elif [ "$1" ] ;then printroutine 13 "$1"
+	else printroutine 11
+	fi
+}
+
+stoproutine() { TLST="$1"
+	if listroutine ;then dbg stop.1 "$LIST"
+		LIST=$(revroutine "$LIST")
+		for i in $LIST ;do
+			dbg stop.2 "$LIST"
+			newpetroutine "$i"
+			if [ "$NAME" ] ;then
+				PTAH="$RAMD/$NAME"
+				dbg stop.3 "$NAME"
+				unmountroutine
+			fi
+		done
+	elif [ "$1" ] ;then printroutine 13 "$1"
+	else printroutine 11
+	fi
+}
+
+mountroutine() {
+	printroutine 6 "$NAME"
+	mkdir -p "$TARG"
+	dbg mnt.1 "$NAME,$TARG"
+	if [ "$ENCR" = yes ] ;then
+		if [ ! "$(command -v mkfs."$FSFS")" ] ;then printroutine 15 mkfs."$FSFS"
+		elif [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
+		else
+			PTAH="$RAMD"/"$NAME"
+			mkdir -p "$PTAH"
+			dbg mnt.2 "$NAME,$PTAH"
+			mount -t "$TYPE" pets "$PTAH" -o size="${SIZE}"M
+			chmod 700 "$PTAH"
+			dd if=/dev/urandom of="$PTAH"/"$NAME" bs=1M count="$SIZE" >/dev/null 2>&1 & pidroutine "$!" randomizing
+			LOOP=$(losetup -f)
+			losetup "$LOOP" "$PTAH/$NAME"
+			cryptsetup create -d /dev/urandom $COPT "$NAME" "$LOOP"
+			printf "\n\n"
+			cryptsetup status "$NAME"
+			printf "\n"
+			dbg mnt.4 "$LOOP,$PTAH,$NAME,$COPT"
+			if [ "$PARI" = yes ] ;then printroutine 17
+				badblocks -swt random /dev/mapper/"$NAME" >/dev/null 2>&1 & pidroutine "$!" generating
+				printf "\n"
+			fi
+			dbg mnt.7 "$FOPT,$MOPT,$NAME,$TARG"
+			mkfs."$FSFS" $FOPT /dev/mapper/"$NAME" >/dev/null 2>&1
+			mount -t "$FSFS" $MOPT /dev/mapper/"$NAME" "$TARG"
+		fi
+	else
+		mount -t "$TYPE" pets "$TARG" -o size="${SIZE}"M $MOPT
+		dbg mnt.8 "$TYPE,$TARG,$SIZE,$MOPT"
+	fi
+	if chk2routine ;then dbg mnt.9 "$COWN,$CMOD,$TARG"
+		chown "$COWN" "$TARG";chmod "$CMOD" "$TARG"
+	fi
+}
+
+unmountroutine() {
+	if chk2routine ;then dbg umnt.2 -
+		advancedroutine stop
+		umount "$TARG"
+		if [ "$ENCR" = yes ] ;then
+			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
+			dbg umnt.3 "$LOOP"
+			if [ -n "$LOOP" ] ;then cryptsetup remove "$NAME"
+				if [ -n "cryptsetup status $NAME|grep $LOOP" ] ;then printroutine 7 ;fi
+				losetup -d "$LOOP"
+				if [ -n "losetup --show $LOOP|grep $PTAH" ] ;then printroutine 8 ;fi
+			fi
+			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
+			dbg umnt.6 "$UMNT"
+			if [ "$UMNT" = "$PTAH" ] ;then
+				umount "$PTAH"
+				printroutine 4
+			fi
+		else printroutine 4
+		fi
+	else printroutine 9 stop
+	fi
+}
+
 advancedroutine() {
 	case "$1" in
 		restart) dbg adv.1 "$1"
@@ -30,12 +195,6 @@ advancedroutine() {
 			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
 			if [ "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi ;;
 	esac
-}
-
-revroutine() {
-	if [ "$(echo "$@"|wc -w)" -gt 1 ] ;then
-		OUTP="$(echo "$@"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }')";echo "$OUTP"
-	else echo "$OUTP" ;fi;OUTP=""
 }
 
 advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
@@ -52,8 +211,7 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 	ARGS=""
 }
 
-advsrvcroutine() {
-	if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
+advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
 	for ITEM in $SRVC ;do
 		dbg srvc.1 "$NAME,$SRVC,$ITEM"
 		if [ -x /etc/init.d/"$ITEM" ] ;then
@@ -62,208 +220,18 @@ advsrvcroutine() {
 	done
 }
 
-newpetroutine() {
-	CONF="$PETD"/"$1"
-	TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
-	dbg newp.1 "$CONF,$TRGT"
-	if [ -r "$CONF" ] && [ -n "$TRGT" ] ;then
-
-		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$STRD"
-		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
-		. "$CONF";NAME="$1"
-		dbg newp.2 "$NAME"
-	else
-		NAME=""
-		printroutine 13 "$1"
-		dbg newp.3 "$1"
-	fi
-}
-
-startroutine() { dbg start.1 "$1"
-	if [ ! "$1" ] ;then listroutine;dbg start.8 -
-	else LIST="$1";dbg start.9 "$1"
-	fi
-	printroutine 1
-	for i in $LIST ;do
-		newpetroutine "$i"
-		if [ $NAME ] ;then
-			if chk1routine ;then printroutine 2
-			elif ! chk2routine ;then
-				mountroutine;dbg start.7 "$i,$TARG,$STOR,$NAME"
-				if chk2routine ;then
-					if [ ! -d $STOR ] ;then
-						mkdir -p $STOR
-						chmod 0700 $STOR
-					else
-						ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
-						dbg start.5 "$ARCH"
-						if [ -r "$ARCH" ] ;then
-							printroutine 3
-							tar --absolute-names --lzop -xf "$ARCH" -C "$TARG" >/dev/null 2>&1 & pidroutine "$!" synchronizing
-							printf '\n'
-							advancedroutine restart
-							printroutine 4
-				 		else
-							printroutine 10
-						fi
-						ARCH=""
-					fi
-				fi
-			else
-				printroutine 16
-			fi
+newpetroutine() { CONF="$PETD"/"$1"
+	if [ -r "$CONF" ] ;then
+		TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
+		dbg newp.1 "$CONF,$TRGT"
+		if  [ -n "$TRGT" ] ;then
+			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$STRD"
+			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
+			. "$CONF";NAME="$1"
+			dbg newp.2 "$NAME"
+		else NAME="";dbg newp.3 "$1"
 		fi
-	done
-}
-
-listroutine() {
-	if [ ! "$(command -v lzop)" ] ;then
-		printroutine 15 lzop
-		exit 1
-	fi
-	LIST=""
-	TLST=$(find $PETD -maxdepth 1 -type f -not -path "$PETD/.*" -not -path "* *")
-	for FILE in $TLST ;do
-		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
-		dbg list.1 "$FILE,$ITEM"
-		if [ -z "$(echo "$ITEM" | tr -d "[:alnum:]")" ] ;then
-			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then
-					dbg list.2 -
-				if [ ! -t 0 ] && ! grep -q ^BOOT=yes "$FILE" ;then
-					printroutine 14 "$FILE"
-				else
-					LIST="$LIST $ITEM"
-					dbg list.4 "$ITEM,$LIST"
-				fi
-			fi
-		fi
-	done
-	if [ ! "$LIST" ] ;then
-		LIST="none!"
-		printroutine 11
-	elif [ "$1" = "display" ] ;then
-		if [ "$2" ] ;then SHOW="$PETD/$2"
-			if [ -r "$SHOW" ] ;then grep -v '^$\|^#' "$SHOW";SHOW=""
-			else printroutine 13 "$2" ;fi
-		else printroutine 11 ;fi
-	fi
-}
-
-mountroutine() {
-	printroutine 6
-	mkdir -p $TARG
-	dbg mnt.1 "$NAME,$TARG"
-	if [ $ENCR = yes ] ;then
-		if [ ! "$(command -v mkfs.$FSFS)" ] ;then printroutine 15 "mkfs.$FSFS"
-		elif [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
-		else
-			PTAH=$RAMD/$NAME
-			mkdir -p $PTAH
-			dbg mnt.2 $NAME,$PTAH
-			mount -t $TYPE pets $PTAH -o size=${SIZE}M
-			chmod 700 $PTAH
-			dd if=/dev/urandom of=$PTAH/$NAME bs=1M count=$SIZE >/dev/null 2>&1 & pidroutine "$!" randomizing
-			LOOP=$(losetup -f)
-			losetup "$LOOP" $PTAH/$NAME
-			cryptsetup create -d /dev/urandom $COPT $NAME "$LOOP"
-			printf "\n\n"
-			cryptsetup status $NAME
-			printf "\n"
-			dbg mnt.4 "$LOOP,$PTAH,$NAME,$COPT"
-			if [ $PARI = yes ] ;then printroutine 17
-				badblocks -swt random /dev/mapper/$NAME >/dev/null 2>&1 & pidroutine "$!" generating
-				printf '\n'
-			fi
-			dbg mnt.7 "$FOPT,$MOPT"
-			mkfs.$FSFS $FOPT /dev/mapper/$NAME >/dev/null 2>&1
-			mount -t $FSFS $MOPT /dev/mapper/$NAME $TARG
-		fi
-	else
-		mount -t $TYPE pets $TARG -o size=${SIZE}M $MOPT
-		dbg mnt.8 $TYPE,$TARG,$SIZE,$MOPT
-	fi
-	if chk2routine ;then dbg mnt.9 "$COWN,$CMOD,$TARG"
-		chown $COWN $TARG
-		chmod $CMOD $TARG
-	fi
-}
-
-
-stoproutine() {
-	if [ ! "$1" ] ;then
-		listroutine
-		LIST="$(revroutine "$LIST")"
-		dbg stop.1 "$LIST"
-	else
-		LIST=$1
-		dbg stop.2 "$1"
-	fi
-	for i in $LIST ;do
-		newpetroutine "$i"
-		if [ $NAME ] ;then
-			PTAH=$RAMD/$NAME
-			dbg stop.3 "$NAME"
-			unmountroutine
-		fi
-	done
-}
-
-unmountroutine() {
-	if chk2routine ;then
-		advancedroutine stop
-		umount "$TARG"
-		dbg umnt.2 -
-		if [ "$ENCR" = yes ] ;then
-			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
-			dbg umnt.3 "$LOOP"
-			if [ -n "$LOOP" ] ;then cryptsetup remove $NAME
-				if [ -n "cryptsetup status $NAME|grep $LOOP" ] ;then printroutine 7 ;fi
-				losetup -d "$LOOP"
-				if [ -n "losetup --show $LOOP|grep $PTAH" ] ;then Printroutine 8 ;fi
-			fi
-			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
-			dbg umnt.6 "$UMNT"
-			if [ "$UMNT" = "$PTAH" ] ;then
-				umount "$PTAH"
-				printroutine 4
-			fi
-		else
-			printroutine 4
-		fi
-	else
-		printroutine 9 stop
-	fi
-}
-
-syncroutine() {
-	if [ ! "$1" ] ;then
-		listroutine
-		dbg sync.1 -
-	else
-		LIST="$1"
-		dbg sync.2 "$1"
-	fi
-	for i in $LIST ;do
-		newpetroutine "$i"
-		dbg sync.3 "$i,$NAME"
-		if [ "$NAME" ] ;then
-			dbg sync.4 "$NAME"
-			if chk1routine ;then printroutine 5
-				DATE=$(date +"%Hh%Mm%Ss-%m.%d.%Y")
-				if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then KEEP=1 ;fi
-				if [ ! -d $STOR ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
-				KEEP=$((KEEP+1))
-				ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
-				tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
-				printf '\n'
-				dbg sync.5 "$STOR,$NAME,$KEEP,$ARCH"
-				find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
-				ARCH=""
-			else
-				printroutine 9 sync
-			fi
-		fi
-	done
+	else printroutine 13 "$1";fi
 }
 
 chk1routine() {
@@ -290,12 +258,12 @@ printroutine() {
 	        3)	echo "$OK" '('$TARG')' 'syncing files: archive -> pet'${GR}${GR} ;;
 	        4)	echo "$OK" '('$TARG')' 'completed!'${GR}${GR} ;;
 	        5)	echo "$OK" '('$TARG')' 'syncing files: pet -> archive'${GR}${GR} ;;
-	        6)	echo "$OK" '('$TARG')' 'mounting as:' $TYPE'. going to work'${GR}${GR} ;;
+	        6)	echo "$OK" '('$TARG')' 'mounting ('$2') as: '"$TYPE"'. going to work'${GR}${GR} ;;
 	        7)	echo "$OK" '('$TARG')' 'removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives, hungry pet'${RD}${RD} ;;
-	        11)	echo "$OK" '(list) enabled pets:' "${LIST}"${GR}${GR} ;;
+	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT=no..'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
@@ -306,18 +274,14 @@ printroutine() {
 	esac
 }
 
-pidroutine() {
-	while kill -0 "$1" 2> /dev/null; do
-		rotating "$2";sleep 1
-	done
-}
+pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "$2";sleep 1;done ;}
 
 rotating() {
 	case $TOGO in
-        	1) printf '%s\r'"$HM "'('"$TARG"') \ '."$1"..;TOGO="2";;
-        	2) printf '%s\r'"$HM "'('"$TARG"') | '.."$1".;TOGO="3";;
-        	3) printf '%s\r'"$HM "'('"$TARG"') / '..."$1";TOGO="4";;
-        	*) printf '%s\r'"$HM "'('"$TARG"') - '"$1"...;TOGO="1";;
+        	1) printf '%s\r'"$HM "'('"$TARG"') \ '${GR}"$1"${GR}${GR}' \ ('$(($(date +%s)-$SECS))'s)';TOGO="2";;
+        	2) printf '%s\r'"$HM "'('"$TARG"') | '${GR}${GR}"$1"${GR}' | ('$(($(date +%s)-$SECS))'s)';TOGO="3";;
+        	3) printf '%s\r'"$HM "'('"$TARG"') / '${GR}${GR}${GR}"$1"' / ('$(($(date +%s)-$SECS))'s)';TOGO="4";;
+        	*) printf '%s\r'"$HM "'('"$TARG"') - '"$1"${GR}${GR}${GR}' - ('$(($(date +%s)-$SECS))'s)';TOGO="1";;
 	esac
 }
 
@@ -328,4 +292,3 @@ case "$1" in
 	list)		listroutine display "$2";;
 	*)		printroutine 0;exit;;
 esac
-
