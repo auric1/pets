@@ -235,9 +235,9 @@ newpetroutine() { CONF="$PETD"/"$1"
 }
 
 chk1routine() {
-	CHK1=$(find $TARG -maxdepth 1 -not -path "$TARG/lost+found"|wc -l) >/dev/null 2>&1
+	CHK1=$(find $TARG -type f|wc -l) >/dev/null 2>&1
 	dbg chk1.1 "$TARG,$CHK1"
-        if [ "$CHK1" -gt 1 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
+        if [ "$CHK1" -ge 1 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
 
 chk2routine() {
