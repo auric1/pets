@@ -45,8 +45,8 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 # supplementary mounts. mounted left to right, dismounted right to left
 #MNTC="/dev/vdb1:/home/mail/stuff /dev/vdb2:/home/mail/stuff/other /dev/vdb3:/home/mail/place"
 #
-# each item issued /etc/init.d/ITEM {restart|stop}. restarted left to right, stopped right to left
-#SRVC="maildaemon otherservice"
+# default /etc/init.d/ITEM {restart|stop}, or prefix 'systemd:' for /etc/systemd/system/ITEM .restarted left to right, stopped right to left
+#SRVC="systemd:maildaemon otherservice"
 #
 ####################
 ########### ENDCFG #

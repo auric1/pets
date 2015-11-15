@@ -31,7 +31,7 @@ listroutine() { LIST=""
 	for FILE in $TLST ;do
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
-		if [ -z "$(echo "$ITEM" | tr -d "[:alnum:]")" ] ;then
+		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 -
 				if [ ! -t 0 ] && ! grep -q ^BOOT=yes "$FILE" ;then
 					printroutine 14 "$FILE"
@@ -213,10 +213,18 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
 	for ITEM in $SRVC ;do
-		dbg srvc.1 "$NAME,$SRVC,$ITEM"
-		if [ -x /etc/init.d/"$ITEM" ] ;then
-			/etc/init.d/"$ITEM" "$1"
+		INIT=$(echo "$ITEM"|awk -F':' '{ print $2 }');INIT="${INIT:-init}"
+		if [ "$INIT" = init ] ;then dbg srvc.1 "$NAME,$SRVC,$ITEM"
+			if [ -x /etc/init.d/"$ITEM" ] ;then /etc/init.d/"$ITEM" "$1" ;fi
+		else	if [ "$1" = restart ] ;then ACTN=Restarting ;else ACTN=Stopping ;fi
+			INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }')
+			ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
+			if [ "$INIT" = systemd ] && [ -r /etc/systemd/system/"$ITEM" ] ;then
+				printroutine 12 "$ACTN" "$ITEM"
+				systemctl "$1" "$ITEM"
+			fi
 		fi
+
 	done
 }
 
@@ -264,6 +272,7 @@ printroutine() {
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives, hungry pet'${RD}${RD} ;;
 	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
+		12)	echo "$OK" "$2"' '"$3"' (via systemctl).' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT=no..'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
