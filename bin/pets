@@ -219,9 +219,9 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
 		else	if [ "$1" = restart ] ;then ACTN=Restarting ;else ACTN=Stopping ;fi
 			INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }')
 			ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
+			dbg srvc.2 "$NAME,$SRVC,$INIT,$ITEM"
 			if [ "$INIT" = systemd ] && [ -r /etc/systemd/system/"$ITEM" ] ;then
-				printroutine 12 "$ACTN" "$ITEM"
-				systemctl "$1" "$ITEM"
+				printroutine 12 "$ACTN" "$ITEM";systemctl "$1" "$ITEM"
 			fi
 		fi
 
@@ -272,9 +272,9 @@ printroutine() {
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives, hungry pet'${RD}${RD} ;;
 	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
-		12)	echo "$OK" "$2"' '"$3"' (via systemctl).' ;;
+		12)	echo "$OK" "$2"' '"$(echo $3|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
-	        14)	echo "$NO" '('"$2"') skipping while BOOT=no..'"$3"'..' ;;
+	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
 		16)	echo "$NO" '('$TARG')' 'looks like this pet is already mounted'${RD}${RD} ;;
 		17)	echo "$OK" '('$TARG')' 'using badblocks to create additional parity'${GR}${GR} ;;

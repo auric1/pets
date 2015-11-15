@@ -1,4 +1,4 @@
-USED=yes
+USED=no
 BOOT=yes
 TARG=/glftpd
 TYPE=tmpfs
