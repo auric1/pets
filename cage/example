@@ -1,7 +1,6 @@
 USED=no
 BOOT=yes
 TARG=/glftpd
-TYPE=tmpfs
 SIZE=400
 CMOD=0700
 MOPT="-o noatime"

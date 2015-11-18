@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.5.0
+# version 0.5.1
 #
 # debug {*|1|log}
 DEBG=0
@@ -163,9 +163,7 @@ mountroutine() {
 }
 
 unmountroutine() {
-	if chk2routine ;then dbg umnt.2 -
-		advancedroutine stop
-		umount "$TARG"
+	if chk2routine ;then dbg umnt.2 -;killingroutine "$TARG";advancedroutine stop;umount "$TARG"
 		if [ "$ENCR" = yes ] ;then
 			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
 			dbg umnt.3 "$LOOP"
@@ -176,14 +174,15 @@ unmountroutine() {
 			fi
 			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
 			dbg umnt.6 "$UMNT"
-			if [ "$UMNT" = "$PTAH" ] ;then
-				umount "$PTAH"
-				printroutine 4
-			fi
+			if [ "$UMNT" = "$PTAH" ] ;then umount "$PTAH";printroutine 4 ;fi
 		else printroutine 4
 		fi
 	else printroutine 9 stop
 	fi
+}
+
+killingroutine() { for PROX in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$PROX"|cut -c2-)" ;done
+	for KILL in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$TARG" "$KILL";kill -9 "$KILL" ;done
 }
 
 advancedroutine() {
@@ -211,12 +210,12 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 	ARGS=""
 }
 
-advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")" ;fi
+advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=Stopping ;else ACTN=Restarting ;fi
 	for ITEM in $SRVC ;do
 		INIT=$(echo "$ITEM"|awk -F':' '{ print $2 }');INIT="${INIT:-init}"
 		if [ "$INIT" = init ] ;then dbg srvc.1 "$NAME,$SRVC,$ITEM"
 			if [ -x /etc/init.d/"$ITEM" ] ;then /etc/init.d/"$ITEM" "$1" ;fi
-		else	if [ "$1" = restart ] ;then ACTN=Restarting ;else ACTN=Stopping ;fi
+		elif [ "$INIT" = systemd ] ;then
 			INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }')
 			ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
 			dbg srvc.2 "$NAME,$SRVC,$INIT,$ITEM"
@@ -266,19 +265,20 @@ printroutine() {
 	        3)	echo "$OK" '('$TARG')' 'syncing files: archive -> pet'${GR}${GR} ;;
 	        4)	echo "$OK" '('$TARG')' 'completed!'${GR}${GR} ;;
 	        5)	echo "$OK" '('$TARG')' 'syncing files: pet -> archive'${GR}${GR} ;;
-	        6)	echo "$OK" '('$TARG')' 'mounting ('$2') as: '"$TYPE"'. going to work'${GR}${GR} ;;
+	        6)	echo "$OK" '('$TARG')' 'mounting ('"$2"') as: '"$TYPE"'. going to work'${GR}${GR} ;;
 	        7)	echo "$OK" '('$TARG')' 'removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives, hungry pet'${RD}${RD} ;;
 	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
-		12)	echo "$OK" "$2"' '"$(echo $3|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
+		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
 		16)	echo "$NO" '('$TARG')' 'looks like this pet is already mounted'${RD}${RD} ;;
 		17)	echo "$OK" '('$TARG')' 'using badblocks to create additional parity'${GR}${GR} ;;
 		18)	echo "$OK" '('"$3"')' "$2" "${4}"${GR}${GR} ;;
+		19)	echo "$HM" '('"$2"')' 'issuing a kill on pid ('"$3"') '${RD}${RD} ;;
 		*)	echo "$HM" "$@" ;;
 	esac
 }
@@ -287,10 +287,10 @@ pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "
 
 rotating() {
 	case $TOGO in
-        	1) printf '%s\r'"$HM "'('"$TARG"') \ '${GR}"$1"${GR}${GR}' \ ('$(($(date +%s)-$SECS))'s)';TOGO="2";;
-        	2) printf '%s\r'"$HM "'('"$TARG"') | '${GR}${GR}"$1"${GR}' | ('$(($(date +%s)-$SECS))'s)';TOGO="3";;
-        	3) printf '%s\r'"$HM "'('"$TARG"') / '${GR}${GR}${GR}"$1"' / ('$(($(date +%s)-$SECS))'s)';TOGO="4";;
-        	*) printf '%s\r'"$HM "'('"$TARG"') - '"$1"${GR}${GR}${GR}' - ('$(($(date +%s)-$SECS))'s)';TOGO="1";;
+        	1) printf '%s\r'"$HM "'('"$TARG"') \ '${GR}"$1"${GR}${GR}' \ ('$(($(date +%s)-SECS))'s)';TOGO="2";;
+        	2) printf '%s\r'"$HM "'('"$TARG"') | '${GR}${GR}"$1"${GR}' | ('$(($(date +%s)-SECS))'s)';TOGO="3";;
+        	3) printf '%s\r'"$HM "'('"$TARG"') / '${GR}${GR}${GR}"$1"' / ('$(($(date +%s)-SECS))'s)';TOGO="4";;
+        	*) printf '%s\r'"$HM "'('"$TARG"') - '"$1"${GR}${GR}${GR}' - ('$(($(date +%s)-SECS))'s)';TOGO="1";;
 	esac
 }
 
