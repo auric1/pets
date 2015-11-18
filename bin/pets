@@ -215,9 +215,7 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=
 		INIT=$(echo "$ITEM"|awk -F':' '{ print $2 }');INIT="${INIT:-init}"
 		if [ "$INIT" = init ] ;then dbg srvc.1 "$NAME,$SRVC,$ITEM"
 			if [ -x /etc/init.d/"$ITEM" ] ;then /etc/init.d/"$ITEM" "$1" ;fi
-		elif [ "$INIT" = systemd ] ;then
-			INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }')
-			ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
+		else INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }');ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
 			dbg srvc.2 "$NAME,$SRVC,$INIT,$ITEM"
 			if [ "$INIT" = systemd ] && [ -r /etc/systemd/system/"$ITEM" ] ;then
 				printroutine 12 "$ACTN" "$ITEM";systemctl "$1" "$ITEM"
