@@ -163,7 +163,7 @@ mountroutine() {
 }
 
 unmountroutine() {
-	if chk2routine ;then dbg umnt.2 -;killingroutine "$TARG";advancedroutine stop;umount "$TARG"
+	if chk2routine ;then dbg umnt.2 -;advancedroutine stop "$TARG";umount "$TARG"
 		if [ "$ENCR" = yes ] ;then
 			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
 			dbg umnt.3 "$LOOP"
@@ -182,7 +182,7 @@ unmountroutine() {
 }
 
 killingroutine() { for PROX in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$PROX"|cut -c2-)" ;done
-	for KILL in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$TARG" "$KILL";kill -9 "$KILL" ;done
+	for KILL in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$1" "$KILL";kill -9 "$KILL" ;done
 }
 
 advancedroutine() {
@@ -190,8 +190,8 @@ advancedroutine() {
 		restart) dbg adv.1 "$1"
 			if [ "$MNTC" ] ;then advmntcroutine mount "$MNTC" ;fi
 			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi ;;
-		stop) dbg adv.2 "$1"
-			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi
+		stop) dbg adv.2 "$1,$2"
+			if [ "$SRVC" ] ;then advsrvcroutine "$1" ;fi;killingroutine "$2"
 			if [ "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi ;;
 	esac
 }
