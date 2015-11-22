@@ -1,0 +1,11 @@
+[Unit]
+Description=Persistent Encryptable TMPFS Server P.E.T.S.
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "pets start"
+ExecStop=/bin/sh -c "pets stop"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

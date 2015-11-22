@@ -11,11 +11,11 @@ RAMD=/mnt/ram
 
 dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 	elif [ $DEBG = log ] ;then LOGD=/etc/pets/log;LOGF=$LOGD/pets.log
-		if [ ! -d $LOGD ] || [ ! -r $LOGF ] ;then mkdir $LOGD;touch $LOGF ;fi
+		if [ ! -d $LOGD ] || [ ! -r $LOGF ] ;then mkdir $LOGD;touch $LOGF;chmod 0755 $LOGF ;fi
 		if [ "$(wc -l $LOGF|awk '{ print $1 }')" -gt 1000 ] ;then
 			LOGN="$(find $LOGD -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
 			LOGN="${LOGN:-0}";LOGN="$((LOGN+1))"
-			mv $LOGF "$LOGF.$LOGN";touch $LOGF
+			mv $LOGF "$LOGF.$LOGN";touch $LOGF;chmod 0755 $LOGF
 		fi
 		echo "$(date +"%b %d %T")" "$@" >> $LOGF
 	fi
@@ -60,7 +60,7 @@ startroutine() { dbg start.1 "$1";TLST="$1"
 				if chk1routine ;then printroutine 2
 				elif ! chk2routine ;then mountroutine
 					if chk2routine ;then dbg start.2 "$i,$TARG,$STOR,$NAME"
-						if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR"
+						if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR";printroutine 10
 						else	ARCH=$(find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
 							dbg start.3 "$ARCH"
 							if [ -r "$ARCH" ] ;then	printroutine 3
@@ -240,7 +240,7 @@ newpetroutine() { CONF="$PETD"/"$1"
 }
 
 chk1routine() {
-	CHK1=$(find $TARG -type f|wc -l) >/dev/null 2>&1
+	CHK1=$(find $TARG -maxdepth 1 -type f|wc -l) >/dev/null 2>&1
 	dbg chk1.1 "$TARG,$CHK1"
         if [ "$CHK1" -ge 1 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
@@ -267,7 +267,7 @@ printroutine() {
 	        7)	echo "$OK" '('$TARG')' 'removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
-	        10)	echo "$NO" '('$TARG')' 'no archives, hungry pet'${RD}${RD} ;;
+	        10)	echo "$NO" '('$TARG')' 'no archives found to sync'${RD}${RD} ;;
 	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
 		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
