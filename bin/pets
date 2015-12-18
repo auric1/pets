@@ -5,15 +5,14 @@
 DEBG=0
 #
 # default paths. do not alter!
-PETD=/etc/pets/cage
-STRD=/etc/pets/store
 RAMD=/mnt/ram
+PETS=/etc/pets
 
 dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
-	elif [ $DEBG = log ] ;then LOGD=/etc/pets/log;LOGF=$LOGD/pets.log
-		if [ ! -d $LOGD ] || [ ! -r $LOGF ] ;then mkdir $LOGD;touch $LOGF;chmod 0755 $LOGF ;fi
+	elif [ $DEBG = log ] ;then LOGS=$PETS/log;LOGF=$LOGS/pets.log
+		if [ ! -d $LOGS ] || [ ! -r $LOGF ] ;then mkdir $LOGS;touch $LOGF;chmod 0755 $LOGF ;fi
 		if [ "$(wc -l $LOGF|awk '{ print $1 }')" -gt 1000 ] ;then
-			LOGN="$(find $LOGD -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
+			LOGN="$(find $LOGS -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
 			LOGN="${LOGN:-0}";LOGN="$((LOGN+1))"
 			mv $LOGF "$LOGF.$LOGN";touch $LOGF;chmod 0755 $LOGF
 		fi
@@ -23,10 +22,10 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 
 revroutine() { echo "$@"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }' ;}
 
-listroutine() { LIST=""
+listroutine() { CAGE=$PETS/cage;LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
-	if [ -n "$TLST" ] ;then TLST="$(find $PETD -maxdepth 1 -type f -name "$TLST" -not -path "$PETD/.*" -not -path "* *")"
-	else TLST="$(find $PETD -maxdepth 1 -type f -not -path "$PETD/.*" -not -path "* *"|sort)"
+	if [ -n "$TLST" ] ;then TLST="$(find $CAGE -maxdepth 1 -type f -name "$TLST" -not -path "$CAGE/.*" -not -path "* *")"
+	else TLST="$(find $CAGE -maxdepth 1 -type f -not -path "$CAGE/.*" -not -path "* *"|sort)"
 	fi
 	for FILE in $TLST ;do
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
@@ -44,7 +43,7 @@ listroutine() { LIST=""
 	done
 	LIST="${LIST:-none!}"
 	if [ "$1" = "display" ] ;then
-		if [ "$2" ] ;then SHOW="$PETD/$2"
+		if [ "$2" ] ;then SHOW="$CAGE/$2"
 			if [ -r "$SHOW" ] ;then grep -v '^$\|^#' "$SHOW";SHOW=""
 			else printroutine 13 "$2" ;fi
 		else printroutine 11 ;fi
@@ -93,7 +92,7 @@ syncroutine() { TLST="$1"
 					if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
 					KEEP=$((KEEP+1))
 					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
-					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" "$TARG"/* >/dev/null 2>&1 & pidroutine "$!" synchronizing
+					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" "$TARG"/. >/dev/null 2>&1 & pidroutine "$!" synchronizing
 					printf "\n"
 					dbg sync.3 "$STOR,$NAME,$KEEP,$ARCH"
 					find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
@@ -225,12 +224,12 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=
 	done
 }
 
-newpetroutine() { CONF="$PETD"/"$1"
+newpetroutine() { CONF="$PETS"/cage/"$1"
 	if [ -r "$CONF" ] ;then
 		TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
 		dbg newp.1 "$CONF,$TRGT"
 		if  [ -n "$TRGT" ] ;then
-			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$STRD"
+			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS"/store
 			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC=""
 			. "$CONF";NAME="$1"
 			dbg newp.2 "$NAME"
@@ -240,9 +239,9 @@ newpetroutine() { CONF="$PETD"/"$1"
 }
 
 chk1routine() {
-	CHK1=$(find $TARG -maxdepth 1 -type f|wc -l) >/dev/null 2>&1
+	CHK1=$(find $TARG -maxdepth 1|wc -l) >/dev/null 2>&1
 	dbg chk1.1 "$TARG,$CHK1"
-        if [ "$CHK1" -ge 1 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
+        if [ "$CHK1" -ge 2 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
 
 chk2routine() {
