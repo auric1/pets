@@ -2,6 +2,4 @@
 
 -add (more) protections vs bad vars @ pet cfg ***WIP***
 
--calc/report time of sync/generate/randomize cycles
-
--
+-fix install.sh, it is shit.....
