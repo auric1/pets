@@ -1,5 +1,6 @@
 [Unit]
 Description=Persistent Encryptable TMPFS Server P.E.T.S.
+JobTimeoutSec=15
 
 [Service]
 Type=oneshot
