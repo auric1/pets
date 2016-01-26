@@ -31,10 +31,13 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
-			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 $RAMD
+			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 -
 				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$FILE" ;then
-					if [ -t 0 ] ;then dbg list.3 -;LIST="$LIST $ITEM" ;else printroutine 14 "$FILE"	;fi
-				else dbg list.4 -;LIST="$LIST $ITEM" ;fi
+					printroutine 14 "$FILE"
+				else
+					LIST="$LIST $ITEM"
+					dbg list.4 "$ITEM,$LIST"
+				fi
 			fi
 		fi
 	done
@@ -223,7 +226,7 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=
 	done
 }
 
-newpetroutine() { CONF="$PETS/cage/$1"
+newpetroutine() { CONF="$PETS"/cage/"$1"
 	if [ -r "$CONF" ] ;then
 		TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
 		dbg newp.1 "$CONF,$TRGT"

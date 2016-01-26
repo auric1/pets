@@ -1,0 +1,1 @@
+* -> 0.5.2 +++ due to a change in the path where loop devices for encrypted pets are mounted, ALL pets with ENCR=yes MUST be FULLY stopped BEFORE upgrading

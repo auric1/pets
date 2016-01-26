@@ -4,8 +4,8 @@ JobTimeoutSec=15
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c "pets start"
-ExecStop=/bin/sh -c "pets stop"
+ExecStart=/bin/sh -c "/etc/pets/bin/pets start"
+ExecStop=/bin/sh -c "/etc/pets/bin/pets stop"
 RemainAfterExit=yes
 
 [Install]
