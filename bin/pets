@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.5.2
+# version 0.5.3
 #
 # debug {*|1|log}
 DEBG=0
@@ -20,7 +20,7 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 	fi
 }
 
-revroutine() { echo "$@"|awk '{ for (i=NF; i>1; i--) printf("%s ",$i); print $1; }' ;}
+revroutine() { echo "$@"|awk '{ for (revr=NF; revr>1; revr--) printf("%s ",$revr); print $revr; }' ;}
 
 listroutine() { CAGE=$PETS/cage;LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
@@ -31,7 +31,7 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
 		dbg list.1 "$FILE,$ITEM"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
-			if [ -r "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 $RAMD
+			if [ -f "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 $RAMD
 				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$FILE" ;then
 					if [ -t 0 ] ;then dbg list.3 -;LIST="$LIST $ITEM" ;else printroutine 14 "$FILE"	;fi
 				else dbg list.4 -;LIST="$LIST $ITEM" ;fi
@@ -40,14 +40,33 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 	done
 	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi
 	LIST="${LIST:-none!}"
-	if [ "$1" = "display" ] ;then
-		if [ "$2" ] ;then SHOW="$CAGE/$2"
-			if [ -r "$SHOW" ] ;then grep -v '^$\|^#' "$SHOW";SHOW=""
-			else printroutine 13 "$2" ;fi
-		else printroutine 11 ;fi
-	fi
+	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;fi
 	if [ "$LIST" != "none!" ] ;then return 0
 	else return 1 ;fi
+}
+
+displayroutine() { if [ -n "$2" ] ;then LIST="$2" ;else printroutine 20 ;fi
+	if [ "$LIST" != "none!" ] ;then
+		for i in $LIST ;do newpetroutine "$i"
+			if chk2routine ;then
+				if [ "$ENCR" = yes ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
+					printroutine 21 "$i" crypto "$TARG" $USED
+				elif [ "$TYPE" = tmpfs ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
+					printroutine 21 "$i" tmpfs "$TARG" $USED
+				elif [ "$TYPE" = ramfs ] ;then SETF=""
+					USED=$(du -xsh -B 1M "$TARG"|cut -f1);AVAL=$(echo "$SIZE - $USED"|bc)
+					PERC=$(awk 'BEGIN { $perc = "'"$USED"'" / "'"$SIZE"'" ;printf("%.2f", $perc);printf ("%%", $perc) }'|cut -c3-)
+					for f in "$AVAL" "$USED" "$SIZE" ;do
+						if [ "$f" -gt 999 ] ;then SETF="$SETF $(echo "scale=1; "$f" / 1024" | bc)G"
+						else SETF="$SETF ${f}M" ;fi
+					done
+					printroutine 21 "$i" ramfs "$TARG" "$PERC" $SETF
+				fi
+			else printroutine 22 "$i"
+			fi
+		done
+		if [ -f "$CAGE/$LIST" ] ;then grep -v '^$\|^#' "$CAGE/$LIST" ;fi
+	fi
 }
 
 startroutine() { dbg start.1 "$1";TLST="$1"
@@ -76,7 +95,7 @@ startroutine() { dbg start.1 "$1";TLST="$1"
 			fi
 		done
 	elif [ "$1" ] ;then printroutine 13 "$1"
-	else printroutine 11
+	else printroutine 20
 	fi
 }
 
@@ -100,7 +119,7 @@ syncroutine() { TLST="$1"
 			fi
 		done
 	elif [ "$1" ] ;then printroutine 13 "$1"
-	else printroutine 11
+	else printroutine 20
 	fi
 }
 
@@ -117,7 +136,7 @@ stoproutine() { TLST="$1"
 			fi
 		done
 	elif [ "$1" ] ;then printroutine 13 "$1"
-	else printroutine 11
+	else printroutine 20
 	fi
 }
 
@@ -250,9 +269,9 @@ chk2routine() {
 }
 
 printroutine() {
-        if [ -t 0 ] ;then
+        if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
-		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
+		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)";
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
         case "$1" in
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
@@ -266,7 +285,6 @@ printroutine() {
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives found to sync'${RD}${RD} ;;
-	        11)	echo "$OK" '(pets) enabled: '"${LIST}"${GR}${GR} ;;
 		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
@@ -275,6 +293,9 @@ printroutine() {
 		17)	echo "$OK" '('$TARG')' 'using badblocks to create additional parity'${GR}${GR} ;;
 		18)	echo "$OK" '('"$3"')' "$2" "${4}"${GR}${GR} ;;
 		19)	echo "$HM" '('"$2"')' 'issuing a kill on pid ('"$3"') '${RD}${RD} ;;
+		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
+		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5'/'$6' free with '$7' used of '$8')'${GR}${GR} ;;
+		22)	echo "$NO" '('"$2"') '${HR}' not mounted!' ${RD}${RD} ;;
 		*)	echo "$HM" "$@" ;;
 	esac
 }
@@ -295,5 +316,6 @@ case "$1" in
 	stop)		syncroutine "$2";stoproutine "$2";;
 	sync)		syncroutine "$2";;
 	list)		listroutine display "$2";;
-	*)		printroutine 0;exit;;
+	*)		if [ ! -n "$2" ] ;then listroutine display ;else printroutine 0 ;fi;exit;;
 esac
+

@@ -3,5 +3,3 @@
 -add (more) protections vs bad vars @ pet cfg ***WIP***
 
 -fix install.sh, it is shit.....
-
--add mount info to `pets list`
