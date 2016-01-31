@@ -33,16 +33,15 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 			if [ -f "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 $RAMD
 				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$FILE" ;then
-					if [ -t 0 ] ;then dbg list.3 -;LIST="$LIST $ITEM" ;else printroutine 14 "$FILE"	;fi
-				else dbg list.4 -;LIST="$LIST $ITEM" ;fi
+					if [ -t 0 ] ;then dbg list.3 -;LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;else printroutine 14 "$FILE"	;fi
+				else dbg list.4 -;LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;fi
 			fi
 		fi
 	done
 	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi
 	LIST="${LIST:-none!}"
-	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;fi
-	if [ "$LIST" != "none!" ] ;then return 0
-	else return 1 ;fi
+	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;exit;fi
+	if [ "$LIST" != "none!" ] ;then return 0 ;else return 1 ;fi
 }
 
 displayroutine() { if [ -n "$2" ] ;then LIST="$2" ;else printroutine 20 ;fi
@@ -234,7 +233,7 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=
 			if [ -x /etc/init.d/"$ITEM" ] ;then /etc/init.d/"$ITEM" "$1" ;fi
 		else INIT=$(echo "$ITEM"|awk -F':' '{ print $1 }');ITEM=$(echo "$ITEM"|awk -F':' '{ print $2 }')
 			dbg srvc.2 "$NAME,$SRVC,$INIT,$ITEM"
-			if [ "$INIT" = systemd ] && [ -r /etc/systemd/system/"$ITEM" ] ;then
+			if [ "$INIT" = systemd ] ;then
 				printroutine 12 "$ACTN" "$ITEM";systemctl "$1" "$ITEM"
 			fi
 		fi
@@ -257,21 +256,19 @@ newpetroutine() { CONF="$PETS/cage/$1"
 }
 
 chk1routine() {
-	CHK1=$(find $TARG -maxdepth 1|wc -l) >/dev/null 2>&1
-	dbg chk1.1 "$TARG,$CHK1"
+	CHK1=$(find $TARG -maxdepth 1|wc -l) >/dev/null 2>&1;dbg chk1.1 "$TARG,$CHK1"
         if [ "$CHK1" -ge 2 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
 
 chk2routine() {
-	CHK2=$(mount|grep " $TARG "|awk '{print $3}') >/dev/null 2>&1
-	dbg chk2.1 "$TARG,$CHK2"
+	CHK2=$(mount|grep " $TARG "|awk '{print $3}') >/dev/null 2>&1;dbg chk2.1 "$TARG,$CHK2"
 	if [ -n "$CHK2" ] ;then return 0;dbg chk2.2 "$CHK2" ;else return 1;dbg chk2.3 "$CHK2" ;fi
 }
 
 printroutine() {
         if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
-		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)";
+		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
         case "$1" in
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
