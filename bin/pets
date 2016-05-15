@@ -248,7 +248,7 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 						#if second :token of item is a dir, mount dev. if hyphon, skip
 						if [ -d "$DIRC" ] ;then printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
-							"$1" "$DEVC" "$DIRC"
+							"$1" "$DEVC" "$DIRC";chown "$COWN" "$DIRC"
 						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
 						fi
 
@@ -296,7 +296,8 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 						fi
 					fi
 
-					printroutine 18 "$ACTN" "$DEVC" to "$DIRC";"$1" "$DEVC" "$DIRC"
+					printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
+					"$1" "$DEVC" "$DIRC";chown "$COWN" "$DIRC"
 				fi
 			else printroutine 11 "$ACTN" "$DEVC"
 			fi

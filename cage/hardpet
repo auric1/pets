@@ -54,7 +54,7 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 #	then use two entries like (luks then lv) so: dev:-:key dev:path
 #	note: it is important that the luks entry is LEFTWARDS of the lvm entries in 'MNTC',
 #	but they are not required to be adjacent.
-#    2)	the third token is not required, but can be a luks keyfile or "-"
+#    2) the third token is not required, but can be a luks keyfile or "-"
 #	using "-" here will do passphrase prompt for manual key entry
 #	note: crypto devices will use name of source dev e.g. /dev/sdb -> 'sdb'
 #
