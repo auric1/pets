@@ -1,7 +1,7 @@
 #! /bin/sh
-# version 0.5.3
+# version 0.6a
 #
-# debug {*|1|log}
+# debug {0|1|log}
 DEBG=0
 #
 # default paths. do not alter!
@@ -46,8 +46,8 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 
 displayroutine() { if [ -n "$2" ] ;then LIST="$2" ;else printroutine 20 ;fi
 	if [ "$LIST" != "none!" ] ;then
-		for i in $LIST ;do newpetroutine "$i"
-			if chk2routine ;then
+		for i in $LIST ;do loadpetroutine "$i"
+			if chkmountroutine ;then
 				if [ "$ENCR" = yes ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
 					printroutine 21 "$i" crypto "$TARG" $USED
 				elif [ "$TYPE" = tmpfs ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
@@ -70,11 +70,11 @@ displayroutine() { if [ -n "$2" ] ;then LIST="$2" ;else printroutine 20 ;fi
 
 startroutine() { dbg start.1 "$1";TLST="$1"
 	if listroutine ;then printroutine 1
-		for i in $LIST ;do newpetroutine "$i"
+		for i in $LIST ;do loadpetroutine "$i"
 			if [ "$NAME" ] ;then
-				if chk1routine ;then printroutine 2
-				elif ! chk2routine ;then mountroutine
-					if chk2routine ;then dbg start.2 "$i,$TARG,$STOR,$NAME"
+				if chkfilesroutine ;then printroutine 2
+				elif ! chkmountroutine ;then mountroutine
+					if chkmountroutine ;then dbg start.2 "$i,$TARG,$STOR,$NAME"
 						if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR";printroutine 10
 						else	ARCH=$(find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
 							dbg start.3 "$ARCH"
@@ -100,9 +100,9 @@ startroutine() { dbg start.1 "$1";TLST="$1"
 
 syncroutine() { TLST="$1"
 	if listroutine ;then dbg sync.1 "$LIST"
-		for i in $LIST ;do newpetroutine "$i"
+		for i in $LIST ;do loadpetroutine "$i"
 			if [ "$NAME" ] ;then dbg sync.2 "$NAME"
-				if chk1routine ;then printroutine 5
+				if chkfilesroutine ;then printroutine 5
 					DATE=$(date +"%Hh%Mm%Ss-%m.%d.%Y")
 					if [ -z "$KEEP" ] || [ "$KEEP" -eq 0 ] ;then KEEP=1 ;fi
 					if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
@@ -127,7 +127,7 @@ stoproutine() { TLST="$1"
 		LIST=$(revroutine "$LIST")
 		for i in $LIST ;do
 			dbg stop.2 "$LIST"
-			newpetroutine "$i"
+			loadpetroutine "$i"
 			if [ "$NAME" ] ;then
 				PTAH="$RAMD/$NAME"
 				dbg stop.3 "$NAME"
@@ -172,13 +172,13 @@ mountroutine() {
 		mount -t "$TYPE" pets "$TARG" -o size="${SIZE}"M $MOPT
 		dbg mnt.8 "$TYPE,$TARG,$SIZE,$MOPT"
 	fi
-	if chk2routine ;then dbg mnt.9 "$COWN,$CMOD,$TARG"
+	if chkmountroutine ;then dbg mnt.9 "$COWN,$CMOD,$TARG"
 		chown "$COWN" "$TARG";chmod "$CMOD" "$TARG"
 	fi
 }
 
 unmountroutine() {
-	if chk2routine ;then dbg umnt.2 -;advancedroutine stop "$TARG";umount "$TARG"
+	if chkmountroutine ;then dbg umnt.2 -;advancedroutine stop "$TARG";umount "$TARG"
 		if [ "$ENCR" = yes ] ;then
 			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
 			dbg umnt.3 "$LOOP"
@@ -188,7 +188,7 @@ unmountroutine() {
 				if [ -n "losetup --show $LOOP|grep $PTAH" ] ;then printroutine 8 ;fi
 			fi
 			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
-			dbg umnt.6 "$UMNT"
+			dbg umnt.6 "$UMNT,$PTAH"
 			if [ "$UMNT" = "$PTAH" ] ;then umount "$PTAH";printroutine 4 ;fi
 		else printroutine 4
 		fi
@@ -212,18 +212,97 @@ advancedroutine() {
 	esac
 }
 
+scanlvroutine() { pvscan >/dev/null 2>&1;vgscan >/dev/null 2>&1;lvscan >/dev/null 2>&1 ;}
+
+chklvroutine() { if test "${1#/dev/mapper/*-*}" != "$1" ;then return 0 ;else return 1 ;fi ;}
+
 advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 	if [ "$1" = "umount" ] ;then ACTN=dismounting;ARGS="$(revroutine "$ARGS")" ;fi
 	for ITEM in $ARGS ;do
 		DEVC=$(echo "$ITEM"|awk -F':' '{ print $1 }')
 		DIRC=$(echo "$ITEM"|awk -F':' '{ print $2 }')
-		dbg adv.mnt.1 "$ARGS,$ITEM,$DEVC,$DIRC"
-		if [ -b "$DEVC" ] && [ -d "$DIRC" ] ;then
-			printroutine 18 "$ACTN" "$DIRC" "$DEVC"
-			"$1" "$DEVC" "$DIRC" >/dev/null 2>&1
+		KEYC=$(echo "$ITEM"|awk -F':' '{ print $3 }')
+		if [ -b "$DEVC" ] || chklvroutine "$DEVC" ;then
+
+			#if item has a third :token (crypto)
+			if [ -n "$KEYC" ] ;then
+				if [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
+				else BLKD=$(echo "$DEVC"|rev|cut -d "/" -f 1|rev)
+
+					if [ "$1" = "mount" ] ;then
+
+						#if third :token of item is a file, use it as a key. if hyphon, ask user passphrase
+						if [ -f "$KEYC" ] ;then KEYC="-d $KEYC"
+						elif [ "$KEYC" = "-" ] ;then KEYC="-y"
+						else printroutine 99 "($DEVC) '$KEYC' not found or bad entry" ;exit 1
+						fi
+
+						#luksopen, then set devc to crypto dev name
+						printroutine 99 "($TARG) luksOpen on '$BLKD': $(cryptsetup -v $KEYC luksOpen $DEVC $BLKD 2>&1)"
+						DEVC="/dev/mapper/$BLKD"
+
+						#do scan for pv/vg/lv devs under newly unlocked crypto
+						if [ "$(command -v vgchange)" ] ;then scanlvroutine
+						else printroutine 99 "($TARG) skipping lvm scan. not installed.."
+						fi
+
+						#if second :token of item is a dir, mount dev. if hyphon, skip
+						if [ -d "$DIRC" ] ;then printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
+							"$1" "$DEVC" "$DIRC"
+						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
+						fi
+
+					elif [ "$1" = "umount" ] ;then
+
+						#generate list of potential lv matching /dev/mapper/X-* from args
+						for lv in $(echo "${ARGS%% "$DEVC"*}") ;do
+							LARG="$(echo $lv|cut -f 1 -d ":")"
+							if chklvroutine "$LARG" ;then
+								LARG="$(echo $LARG|rev|cut -f 1 -d "/"|cut -f 2 -d "-"|rev)"
+								LVMS="$LVMS $LARG"
+							fi
+						done
+
+						#process list to disable vg individually avoiding conflict with non-PETS/system vg
+						if [ -n "$LVMS" ] ;then
+							if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
+							else	for vg in $(printf '%s\n' $LVMS|sort -u) ;do
+									if [ -d "/dev/$vg" ] ;then
+										printroutine 99 "($TARG) $(vgchange -a n $vg 2>&1)"
+									fi
+								done
+							fi
+						fi
+
+						#if second :token of item is a dir, unmount dev. if hyphon, skip
+						LVMS="";DEVC="/dev/mapper/$BLKD"
+						if [ -d "$DIRC" ] ;then	printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DIRC"
+						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
+						fi
+						printroutine 99 "($TARG) luksClose on '$BLKD': $(cryptsetup -v luksClose $BLKD 2>&1)"
+					fi
+				fi
+
+			#if item has no third :token
+			elif [ -d "$DIRC" ] ;then
+				if [ "$1" = "umount" ] ;then printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DEVC"
+				elif [ "$1" = "mount" ] ;then
+
+					#when dev is lv initiate vgchange
+					if chklvroutine "$DEVC" ;then
+						if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
+						else LVVG="$(echo $DEVC|cut -d "-" -f 1|rev|cut -d "/" -f 1|rev)"
+							if [ ! -d "/dev/$LVVG" ] ;then printroutine 99 "($TARG) $(vgchange -a y $LVVG 2>&1)" ;fi
+						fi
+					fi
+
+					printroutine 18 "$ACTN" "$DEVC" to "$DIRC";"$1" "$DEVC" "$DIRC"
+				fi
+			else printroutine 11 "$ACTN" "$DEVC"
+			fi
+		else printroutine 99 "($TARG) can not find block device '$DEVC'"
 		fi
 	done
-	ARGS=""
 }
 
 advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=Stopping ;else ACTN=Restarting ;fi
@@ -241,7 +320,7 @@ advsrvcroutine() { if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=
 	done
 }
 
-newpetroutine() { CONF="$PETS/cage/$1"
+loadpetroutine() { CONF="$PETS/cage/$1"
 	if [ -r "$CONF" ] ;then
 		TRGT="$(grep ^TARG= "$CONF"|awk -F"=" '{ print $2 }'|grep "^/")"
 		dbg newp.1 "$CONF,$TRGT"
@@ -255,12 +334,12 @@ newpetroutine() { CONF="$PETS/cage/$1"
 	else printroutine 13 "$1";fi
 }
 
-chk1routine() {
+chkfilesroutine() {
 	CHK1=$(find $TARG -maxdepth 1|wc -l) >/dev/null 2>&1;dbg chk1.1 "$TARG,$CHK1"
         if [ "$CHK1" -ge 2 ] ;then return 0;dbg chk1.2 "$CHK1";else return 1;dbg chk1.3 "$CHK1"	;fi
 }
 
-chk2routine() {
+chkmountroutine() {
 	CHK2=$(mount|grep " $TARG "|awk '{print $3}') >/dev/null 2>&1;dbg chk2.1 "$TARG,$CHK2"
 	if [ -n "$CHK2" ] ;then return 0;dbg chk2.2 "$CHK2" ;else return 1;dbg chk2.3 "$CHK2" ;fi
 }
@@ -272,7 +351,7 @@ printroutine() {
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
         case "$1" in
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
-	        1)	echo "$OK" 'Starting Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
+	        1)	echo "$OK" 'Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
 	        2)	echo "$NO" '('$TARG')' 'this path already has a pets things in it'${RD}${RD} ;;
 	        3)	echo "$OK" '('$TARG')' 'syncing files: archive -> pet'${GR}${GR} ;;
 	        4)	echo "$OK" '('$TARG')' 'completed!'${GR}${GR} ;;
@@ -282,17 +361,19 @@ printroutine() {
 	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
 	        9)	echo "$NO" '('$TARG')' 'no pets in there to '"$2"'??'${RD}${RD} ;;
 	        10)	echo "$NO" '('$TARG')' 'no archives found to sync'${RD}${RD} ;;
+		11)	echo "$HM" '('$TARG')' 'skip '"$2"' device: '"$3"'' ;;
 		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'can not find any pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
 		16)	echo "$NO" '('$TARG')' 'looks like this pet is already mounted'${RD}${RD} ;;
 		17)	echo "$OK" '('$TARG')' 'using badblocks to create additional parity'${GR}${GR} ;;
-		18)	echo "$OK" '('"$3"')' "$2" "${4}"${GR}${GR} ;;
+		18)	echo "$OK" '('$TARG')' "$2" "$3" "$4" "$5"${GR}${GR} ;;
 		19)	echo "$HM" '('"$2"')' 'issuing a kill on pid ('"$3"') '${RD}${RD} ;;
 		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
 		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5'/'$6' free with '$7' used of '$8')'${GR}${GR} ;;
 		22)	echo "$NO" '('"$2"') '${HR}' not mounted!' ${RD}${RD} ;;
+		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
 		*)	echo "$HM" "$@" ;;
 	esac
 }
@@ -315,4 +396,3 @@ case "$1" in
 	list)		listroutine display "$2";;
 	*)		if [ ! -n "$2" ] ;then listroutine display ;else printroutine 0 ;fi;exit;;
 esac
-
