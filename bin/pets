@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6a
+# version 0.6c
 #
 # debug {0|1|log}
 DEBG=0
@@ -299,7 +299,7 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 					printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
 					"$1" "$DEVC" "$DIRC";chown "$COWN" "$DIRC"
 				fi
-			else printroutine 11 "$ACTN" "$DEVC"
+			elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
 			fi
 		else printroutine 99 "($TARG) can not find block device '$DEVC'"
 		fi
