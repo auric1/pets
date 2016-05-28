@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6c
+# version 0.6d
 #
 # debug {0|1|log}
 DEBG=0
@@ -222,6 +222,12 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 		DEVC=$(echo "$ITEM"|awk -F':' '{ print $1 }')
 		DIRC=$(echo "$ITEM"|awk -F':' '{ print $2 }')
 		KEYC=$(echo "$ITEM"|awk -F':' '{ print $3 }')
+
+		#detect UUID entry and convert DEVC var
+		if echo "$DEVC"|grep -Eq '[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}' ;then UUID=""
+			if UUID="$(blkid -t UUID="$DEVC" -o device)" ;then DEVC="$UUID";UUID="" ;fi
+		fi
+
 		if [ -b "$DEVC" ] || chklvroutine "$DEVC" ;then
 
 			#if item has a third :token (crypto)

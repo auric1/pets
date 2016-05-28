@@ -43,6 +43,7 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 ####################
 #
 # supplementary mounts. mounted left to right, dismounted right to left. DEVICE:{PATH/-}:{KEYFILE/-}
+#	UUIDs can be used in the DEVICE token (avoid lv targets - possibility of dupicate IDs)
 #	note: you MUST use the 'TOPT' var to exclude each of these entries
 #	the only exception being if an entry is being mounted WITHIN another entry!
 #	e.g. only 'test1' is excluded in this pet's TOPT
@@ -51,14 +52,14 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 # (v0.6a) * now supporting luks and lvm devices via 2 changes
 #    1) the second token can now be "-" to skip the mount/umount of device
 #	have a luks device with underlying lvm? of course no mount of luks necessary,
-#	then use two entries like (luks then lv) so: dev:-:key dev:path
+#	then use two entries like (luks then lv) so:	dev:-:key dev:path
 #	note: it is important that the luks entry is LEFTWARDS of the lvm entries in 'MNTC',
 #	but they are not required to be adjacent.
 #    2) the third token is not required, but can be a luks keyfile or "-"
 #	using "-" here will do passphrase prompt for manual key entry
 #	note: crypto devices will use name of source dev e.g. /dev/sdb -> 'sdb'
-#
-#MNTC="/dev/vdb:/home/mail/dump /dev/md0:-:/root/.keystore/md0_key /dev/mapper/md0-lv1:/home/mail/test1 /dev/mapper/md0-lv2:/home/mail/test1/test2"
+##
+#MNTC="f4d20e76-c90d-42ec-9909-5a77b35851e3:/home/mail/dump /dev/md0:-:/root/.keystore/md0_key /dev/mapper/md0-lv1:/home/mail/test1 /dev/mapper/md0-lv2:/home/mail/test1/test2"
 #
 # default /etc/init.d/ITEM {restart|stop}, or prefix 'systemd:' for /etc/systemd/system/ITEM .restarted left to right, stopped right to left
 #SRVC="systemd:maildaemon otherservice"
