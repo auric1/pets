@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6d
+# version 0.6e
 #
 # debug {0|1|log}
 DEBG=0
@@ -24,47 +24,77 @@ revroutine() { echo "$@"|awk '{ for (revr=NF; revr>1; revr--) printf("%s ",$revr
 
 listroutine() { CAGE=$PETS/cage;LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
+
+	#get archive filename of supplied pet or form complete list of pet archives
 	if [ -n "$TLST" ] ;then TLST="$(find $CAGE -maxdepth 1 -type f -name "$TLST" -not -path "$CAGE/.*" -not -path "* *")"
 	else TLST="$(find $CAGE -maxdepth 1 -type f -not -path "$CAGE/.*" -not -path "* *"|sort)"
 	fi
-	for FILE in $TLST ;do
-		ITEM=$(echo "$FILE"|rev|cut -d "/" -f 1|rev)
-		dbg list.1 "$FILE,$ITEM"
+
+	#develop alphanumeric list of pets to operate on
+	for file in $TLST ;do
+		ITEM=$(echo "$file"|rev|cut -d "/" -f 1|rev)
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
-			if [ -f "$FILE" ] && grep -q ^USED=yes "$FILE" ;then dbg list.2 $RAMD
-				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$FILE" ;then
-					if [ -t 0 ] ;then dbg list.3 -;LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;else printroutine 14 "$FILE"	;fi
-				else dbg list.4 -;LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;fi
+
+			#and file exists and USED equals yes
+			if [ -f "$file" ] && grep -q ^USED=yes "$file" ;then
+
+				#and if RAMD doesnt exist and BOOT not equal to yes assume system boot
+				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$file" ;then
+
+					#but if no terminal then skip, otherwise continue adding
+					if [ -t 0 ] ;then LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;else printroutine 14 "$file" ;fi
+				else LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')"
+				fi
 			fi
 		fi
 	done
+
+	#encrypted tmpfs/ramfs mount base and loop device path. set list to none if doesnt exist
 	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi
 	LIST="${LIST:-none!}"
+
+	#if given arg to display, pass it and supplied pet to displayroutine
 	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;exit;fi
+
+	#give boolean properties to listroutine based on list content or lack of
 	if [ "$LIST" != "none!" ] ;then return 0 ;else return 1 ;fi
 }
 
-displayroutine() { if [ -n "$2" ] ;then LIST="$2" ;else printroutine 20 ;fi
+displayroutine() {
+	#if pet specified, show vars from file, else show enabled list
+	if [ -n "$2" ] && [ -f "$CAGE/$2" ] ;then LIST="$2"
+		printf "\n";grep -v '^$\|^#' "$CAGE/$2";printf "\n"
+	else printroutine 20
+	fi
+
+	#cycle pets list, if mounted show stats
 	if [ "$LIST" != "none!" ] ;then
-		for i in $LIST ;do loadpetroutine "$i"
-			if chkmountroutine ;then
-				if [ "$ENCR" = yes ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
-					printroutine 21 "$i" crypto "$TARG" $USED
-				elif [ "$TYPE" = tmpfs ] ;then USED=$(revroutine $(df -h|grep "$TARG"|head -n1)|cut -f 2- -d " "|rev|cut -f 2- -d " "|rev)
-					printroutine 21 "$i" tmpfs "$TARG" $USED
-				elif [ "$TYPE" = ramfs ] ;then SETF=""
+		for disp in $LIST ;do loadpetroutine "$disp"
+			if chkmountroutine ;then STAT=""
+
+				#encrypted or tmpfs, grab stats from df *FIX*. use du for ramfs
+				if [ "$ENCR" = yes ] ;then STAT=$(df -Ph|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
+					printroutine 21 "$disp" crypto "$TARG" $STAT
+				elif [ "$TYPE" = tmpfs ] ;then STAT=$(df -Ph|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
+					printroutine 21 "$disp" tmpfs "$TARG" $STAT
+				elif [ "$TYPE" = ramfs ] ;then
+
+					#calc available space with du and format percentage
 					USED=$(du -xsh -B 1M "$TARG"|cut -f1);AVAL=$(echo "$SIZE - $USED"|bc)
-					PERC=$(awk 'BEGIN { $perc = "'"$USED"'" / "'"$SIZE"'" ;printf("%.2f", $perc);printf ("%%", $perc) }'|cut -c3-)
-					for f in "$AVAL" "$USED" "$SIZE" ;do
-						if [ "$f" -gt 999 ] ;then SETF="$SETF $(echo "scale=1; "$f" / 1024" | bc)G"
-						else SETF="$SETF ${f}M" ;fi
+					PERC=$(printf "%.0f%%" $(echo "scale=1; $USED*100/$SIZE"|bc))
+
+					#replicate human readable suffixes of df before print (M/G)
+					for sufx in "$USED" "$AVAL" "$SIZE" ;do
+						if [ "$sufx" -gt 999 ] ;then STAT="$STAT $(printf "%.1f" $(echo "scale=2; ${sufx}/1024"|bc))G"
+						else STAT="$STAT ${sufx}M" ;fi
 					done
-					printroutine 21 "$i" ramfs "$TARG" "$PERC" $SETF
+					printroutine 21 "$disp" ramfs "$TARG" "$PERC" $STAT
 				fi
-			else printroutine 22 "$i"
+
+			#if pet isnt mounted
+			else printroutine 22 "$disp"
 			fi
 		done
-		if [ -f "$CAGE/$LIST" ] ;then grep -v '^$\|^#' "$CAGE/$LIST" ;fi
 	fi
 }
 
@@ -352,7 +382,7 @@ chkmountroutine() {
 }
 
 printroutine() {
-        if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)"
+        if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
 		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
@@ -378,7 +408,7 @@ printroutine() {
 		18)	echo "$OK" '('$TARG')' "$2" "$3" "$4" "$5"${GR}${GR} ;;
 		19)	echo "$HM" '('"$2"')' 'issuing a kill on pid ('"$3"') '${RD}${RD} ;;
 		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
-		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5'/'$6' free with '$7' used of '$8')'${GR}${GR} ;;
+		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5''${FS}''$6' used with '$7' free of '$8')'${GR}${GR} ;;
 		22)	echo "$NO" '('"$2"') '${HR}' not mounted!' ${RD}${RD} ;;
 		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
 		*)	echo "$HM" "$@" ;;
