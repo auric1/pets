@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6e
+# version 0.6e1
 #
 # debug {0|1|log}
 DEBG=0
@@ -50,13 +50,12 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 	done
 
 	#encrypted tmpfs/ramfs mount base and loop device path. set list to none if doesnt exist
-	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi
-	LIST="${LIST:-none!}"
+	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi ;LIST="${LIST:-none!}"
 
 	#if given arg to display, pass it and supplied pet to displayroutine
 	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;exit;fi
 
-	#give boolean properties to listroutine based on list content or lack of
+	#give boolean properties to listroutine based on list content
 	if [ "$LIST" != "none!" ] ;then return 0 ;else return 1 ;fi
 }
 
@@ -72,11 +71,11 @@ displayroutine() {
 		for disp in $LIST ;do loadpetroutine "$disp"
 			if chkmountroutine ;then STAT=""
 
-				#encrypted or tmpfs, grab stats from df *FIX*. use du for ramfs
-				if [ "$ENCR" = yes ] ;then STAT=$(df -Ph|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
-					printroutine 21 "$disp" crypto "$TARG" $STAT
-				elif [ "$TYPE" = tmpfs ] ;then STAT=$(df -Ph|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
-					printroutine 21 "$disp" tmpfs "$TARG" $STAT
+				#encrypted or tmpfs, grab stats from df. use du for ramfs
+				if [ "$ENCR" = yes ] || [ "$TYPE" = tmpfs ] ;then
+					if [ "$ENCR" = yes ] ;then TYPE="crypt" ;fi
+					STAT=$(df -Ph|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
+					printroutine 21 "$disp" "$TYPE" "$TARG" $STAT
 				elif [ "$TYPE" = ramfs ] ;then
 
 					#calc available space with du and format percentage
@@ -88,7 +87,7 @@ displayroutine() {
 						if [ "$sufx" -gt 999 ] ;then STAT="$STAT $(printf "%.1f" $(echo "scale=2; ${sufx}/1024"|bc))G"
 						else STAT="$STAT ${sufx}M" ;fi
 					done
-					printroutine 21 "$disp" ramfs "$TARG" "$PERC" $STAT
+					printroutine 21 "$disp" "$TYPE" "$TARG" "$PERC" $STAT
 				fi
 
 			#if pet isnt mounted
