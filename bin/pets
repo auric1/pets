@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6e3
+# version 0.6e4
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -22,12 +22,10 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
 
 	#get archive filename of supplied pet or form complete list of pet archives
-	if [ -n "$TLST" ] ;then OLST="-name "$TLST"" ;else OLST="" ;fi
-	TLST="$(find $CAGE -maxdepth 1 -type f $OLST -not -path "$CAGE/.*" -not -path "* *"|sort)"
+	TLST="$(find $CAGE -maxdepth 1 -type f -name "${TLST:-*}" -not -path "$CAGE/.*" -not -path "* *"|sort)"
 
 	#develop alphanumeric list of pets to operate on
-	for file in $TLST ;do
-		ITEM=$(echo "$file"|rev|cut -d "/" -f 1|rev)
+	for file in $TLST ;do ITEM="$(basename $file)"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 
 			#and file exists and USED equals yes
@@ -70,13 +68,13 @@ displayroutine() {
 				#encrypted or tmpfs, grab stats from df. use du for ramfs
 				if [ "$ENCR" = yes ] || [ "$TYPE" = tmpfs ] ;then
 					if [ "$ENCR" = yes ] ;then TYPE="crypt" ;fi
-					STAT=$(df -Ph|grep -v "$RAMD"|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')
+					STAT="$(df -Ph|grep -v "$RAMD"|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')"
 					printroutine 21 "$disp" "$TYPE" "$TARG" $STAT
 				elif [ "$TYPE" = ramfs ] ;then
 
 					#calc available space with du and format percentage
-					USED=$(du -xsh -B 1M "$TARG"|cut -f1);AVAL=$(echo "$SIZE - $USED"|bc)
-					PERC=$(printf "%.0f%%" $(echo "scale=1; $USED*100/$SIZE"|bc))
+					USED="$(du -xsh -B 1M "$TARG"|cut -f1);AVAL=$(echo "$SIZE - $USED"|bc)"
+					PERC="$(printf "%.0f%%" $(echo "scale=1; $USED*100/$SIZE"|bc))"
 
 					#replicate human readable suffixes of df before print (M/G)
 					for sufx in "$USED" "$AVAL" "$SIZE" ;do
@@ -120,7 +118,7 @@ startroutine() { TLST="$1"
 					 		else
 
 								#error if no archive found
-								printroutine 9 archive start
+								printroutine 9 archive extract
 							fi
 							ARCH=""
 						fi
@@ -150,8 +148,8 @@ syncroutine() { TLST="$1"
 
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
 				if chkfilesroutine ;then printroutine 3 pet archive
-					DATE=$(date +"%Hh%Mm%Ss-%m.%d.%Y")
-					if [ -z "$KEEP" ] || [ "$KEEP" -eq 0 ] ;then KEEP=1 ;fi ;KEEP=$((KEEP+1))
+					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
+					if [ -z "$KEEP" ] || [ "$KEEP" -eq 0 ] ;then KEEP="1" ;fi ;KEEP="$((KEEP+1))"
 					if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
 
 					#generate new archive
@@ -180,7 +178,7 @@ syncroutine() { TLST="$1"
 stoproutine() { TLST="$1"
 
 	#if any pets are found enabled, reverse order of list
-	if listroutine ;then LIST=$(revroutine "$LIST")
+	if listroutine ;then LIST="$(revroutine "$LIST")"
 
 		#cycle enabled pets list. attempt to unmount each
 		for stop in $LIST ;do NAME="";loadpetroutine "$stop"
@@ -247,7 +245,7 @@ unmountroutine() {
 
 		#if encrypted, get loop device from status and remove crypt device
 		if [ "$ENCR" = yes ] ;then
-			LOOP=$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')
+			LOOP="$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')"
 			if [ -n "$LOOP" ] ;then cryptsetup remove "$NAME"
 
 				#if successful, remove loop device
@@ -257,7 +255,7 @@ unmountroutine() {
 			fi
 
 			#redundant mount check then proceed with umount
-			UMNT=$(mount|grep "$PTAH "|head -n1|awk '{print $3}')
+			UMNT="$(mount|grep "$PTAH "|head -n1|awk '{print $3}')"
 			if [ "$UMNT" = "$PTAH" ] ;then umount "$PTAH";printroutine 4 ;fi
 
 		#if not encrypted, done
@@ -297,16 +295,16 @@ advancedroutine() {
 }
 
 
-advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
+advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 	#if stop received, reverse args order and set ACTN accordingly. start cycle
-	if [ "$1" = "umount" ] ;then ACTN=dismounting;ARGS="$(revroutine "$ARGS")" ;fi
+	if [ "$1" = "umount" ] ;then ACTN="dismounting";ARGS="$(revroutine "$ARGS")" ;fi
 	for mnts in $ARGS ;do
 
-		#develop vars from MNTC tokens
-		DEVC=$(echo "$mnts"|awk -F':' '{print $1}')
-		DIRC=$(echo "$mnts"|awk -F':' '{print $2}')
-		KEYC=$(echo "$mnts"|awk -F':' '{print $3}')
+		#develop vars from MNTC args
+		DEVC="$(echo "$mnts"|awk -F':' '{print $1}')"
+		DIRC="$(echo "$mnts"|awk -F':' '{print $2}')"
+		KEYC="$(echo "$mnts"|awk -F':' '{print $3}')"
 
 		#detect UUID entry and convert DEVC var
 		if echo "$DEVC"|grep -Eq '[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}' ;then UUID=""
@@ -319,7 +317,7 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 			#if item has a third :token (crypto)
 			if [ -n "$KEYC" ] ;then
 				if [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
-				else BLKD=$(echo "$DEVC"|rev|cut -d "/" -f 1|rev)
+				else BLKD="$(basename $DEVC)"
 
 					if [ "$1" = "mount" ] ;then
 
@@ -347,10 +345,9 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 					elif [ "$1" = "umount" ] ;then
 
 						#generate list of potential lv matching /dev/mapper/X-* from args
-						for lv in $(echo "${ARGS%% "$DEVC"*}") ;do
-							LARG="$(echo $lv|cut -f 1 -d ":")"
+						for lv in $(echo "${ARGS%% "$DEVC"*}") ;do LARG="$(echo $lv|cut -f 1 -d ":")"
 							if chklvroutine "$LARG" ;then
-								LARG="$(echo $LARG|rev|cut -f 1 -d "/"|cut -f 2 -d "-"|rev)"
+								LARG="$(basename $LARG|cut -f 1 -d "-")"
 								LVMS="$LVMS $LARG"
 							fi
 						done
@@ -383,7 +380,7 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 					#when dev is lv initiate vgchange
 					if chklvroutine "$DEVC" ;then
 						if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
-						else LVVG="$(echo $DEVC|cut -d "-" -f 1|rev|cut -d "/" -f 1|rev)"
+						else LVVG="$(basename $DEVC|cut -f 1 -d "-")"
 							if [ ! -d "/dev/$LVVG" ] ;then printroutine 99 "($TARG) $(vgchange -a y $LVVG 2>&1)" ;fi
 						fi
 					fi
@@ -402,16 +399,16 @@ advmntcroutine() { ACTN=mounting;ARGS="$(echo "$@"|cut -f 2- -d " ")"
 advsrvcroutine() {
 
 	#if stop received, reverse arg order. set ACTN accordingly
-	if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN=Stopping ;else ACTN=Restarting ;fi
+	if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN="Stopping" ;else ACTN="Restarting" ;fi
 
 	#cycle list and set init system from token, otherwise set as init
-	for item in $SRVC ;do INIT=$(echo "$item"|awk -F':' '{print $2}');INIT="${INIT:-init}"
+	for item in $SRVC ;do INIT="$(echo "$item"|awk -F':' '{print $2}')";INIT="${INIT:-init}"
 
 		#while init remains and service file is executable, issue command arg
 		if [ "$INIT" = init ] ;then if [ -x /etc/init.d/"$item" ] ;then /etc/init.d/"$item" "$1" ;fi
 
 		#if set to systemd, ensure correctness of vars, then manipulate systemctl
-		else INIT=$(echo "$item"|awk -F':' '{print $1}');item=$(echo "$item"|awk -F':' '{print $2}')
+		else INIT="$(echo "$item"|awk -F':' '{print $1}')";item="$(echo "$item"|awk -F':' '{print $2}')"
 			if [ "$INIT" = systemd ] ;then printroutine 12 "$ACTN" "$item";systemctl "$1" "$item" ;fi
 		fi
 	done
@@ -433,13 +430,13 @@ loadpetroutine() { CONF="$PETS/cage/$1"
 
 
 #true if TARG contains any files
-chkfilesroutine() { CHK1=$(find $TARG -maxdepth 1|wc -l) >/dev/null 2>&1
+chkfilesroutine() { CHK1="$(find $TARG -maxdepth 1|wc -l)" >/dev/null 2>&1
         if [ "$CHK1" -ge 2 ] ;then return 0 ;else return 1 ;fi
 }
 
 
 #true if TARG is already mounted
-chkmountroutine() { CHK2=$(mount|grep " $TARG "|awk '{print $3}') >/dev/null 2>&1
+chkmountroutine() { CHK2="$(mount|grep " $TARG "|awk '{print $3}')" >/dev/null 2>&1
 	if [ -n "$CHK2" ] ;then return 0 ;else return 1 ;fi
 }
 
@@ -479,7 +476,7 @@ printroutine() {
 		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
 
-	#output set. reduce me!
+	#output set.
         case "$1" in
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
 	        1)	echo "$OK" 'Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
