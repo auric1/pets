@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6e4
+# version 0.6f
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -18,7 +18,7 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 }
 
 
-listroutine() { CAGE=$PETS/cage;LIST=""
+listroutine() { CAGE="$PETS/cage";LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
 
 	#get archive filename of supplied pet or form complete list of pet archives
@@ -28,11 +28,14 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 	for file in $TLST ;do ITEM="$(basename $file)"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 
+			#temporary function to ensure all pet file vars are quoted
+			fixpetroutine "$file"
+
 			#and file exists and USED equals yes
-			if [ -f "$file" ] && grep -q ^USED=yes "$file" ;then
+			if [ -f "$file" ] && grep -q ^USED=\"yes\" "$file" ;then
 
 				#and if RAMD doesnt exist and BOOT not equal to yes assume system boot
-				if [ ! -d $RAMD ] && ! grep -q ^BOOT=yes "$file" ;then
+				if [ ! -d "$RAMD" ] && ! grep -q ^BOOT=\"yes\" "$file" ;then
 
 					#but if no terminal then skip, otherwise continue adding
 					if [ -t 0 ] ;then LIST="$(echo $LIST $ITEM|sed -e 's/^[ \t]*//')" ;else printroutine 14 "$file" ;fi
@@ -43,7 +46,7 @@ listroutine() { CAGE=$PETS/cage;LIST=""
 	done
 
 	#encrypted tmpfs/ramfs mount base and loop device path. set list to none if doesnt exist
-	if [ ! -d $RAMD ] ;then mkdir -p $RAMD ;fi ;LIST="${LIST:-none!}"
+	if [ ! -d "$RAMD" ] ;then mkdir -p "$RAMD" ;fi ;LIST="${LIST:-none!}"
 
 	#if given arg to display, pass it and supplied pet to displayroutine
 	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;exit ;fi
@@ -66,22 +69,22 @@ displayroutine() {
 			if chkmountroutine ;then STAT=""
 
 				#encrypted or tmpfs, grab stats from df. use du for ramfs
-				if [ "$ENCR" = yes ] || [ "$TYPE" = tmpfs ] ;then
-					if [ "$ENCR" = yes ] ;then TYPE="crypt" ;fi
-					STAT="$(df -Ph|grep -v "$RAMD"|grep "$TARG"|head -n1|awk '{print $5,$3,$4,$2}')"
-					printroutine 21 "$disp" "$TYPE" "$TARG" $STAT
-				elif [ "$TYPE" = ramfs ] ;then
+				if [ $ENCR = yes ] || [ $TYPE = tmpfs ] ;then
+					if [ $ENCR = yes ] ;then TYPE="crypt" ;fi
+					STAT="$(df -Ph|grep -v "$RAMD"|grep $TARG|head -n1|awk '{print $5,$3,$4,$2}')"
+					printroutine 21 "$disp" $TYPE $TARG $STAT
+				elif [ $TYPE = ramfs ] ;then
 
 					#calc available space with du and format percentage
-					USED="$(du -xsh -B 1M "$TARG"|cut -f1);AVAL=$(echo "$SIZE - $USED"|bc)"
+					DUAV="$(du -xsh -B 1M $TARG|cut -f1);AVAL=$(echo "$SIZE - $DUAV"|bc)"
 					PERC="$(printf "%.0f%%" $(echo "scale=1; $USED*100/$SIZE"|bc))"
 
 					#replicate human readable suffixes of df before print (M/G)
-					for sufx in "$USED" "$AVAL" "$SIZE" ;do
+					for sufx in "$DUAV" "$AVAL" $SIZE ;do
 						if [ "$sufx" -gt 999 ] ;then STAT="$STAT $(printf "%.1f" $(echo "scale=2; ${sufx}/1024"|bc))G"
 						else STAT="$STAT ${sufx}M" ;fi
 					done
-					printroutine 21 "$disp" "$TYPE" "$TARG" "$PERC" $STAT
+					printroutine 21 "$disp" "$TYPE" $TARG "$PERC" $STAT
 				fi
 
 			#if pet isnt mounted
@@ -105,12 +108,12 @@ startroutine() { TLST="$1"
 
 					#on succesfull mount, find latest archive. create STOR if non-existant
 					if chkmountroutine ;then
-						if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR";printroutine 9 archive start
+						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printroutine 9 archive start
 						else
 							#establish latest archive file of pet. perform extraction
-							ARCH=$(find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
+							ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
 							if [ -r "$ARCH" ] ;then	printroutine 3 archive pet
-								tar --absolute-names --lzop -xf "$ARCH" -C "$TARG" >/dev/null 2>&1 & pidroutine "$!" synchronizing
+								tar --absolute-names --lzop -xf "$ARCH" -C $TARG >/dev/null 2>&1 & pidroutine "$!" synchronizing
 								printf "\n"
 
 								#if TARG now has contents, service MNTC/SRVC vars.
@@ -149,16 +152,16 @@ syncroutine() { TLST="$1"
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
 				if chkfilesroutine ;then printroutine 3 pet archive
 					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
-					if [ -z "$KEEP" ] || [ "$KEEP" -eq 0 ] ;then KEEP="1" ;fi ;KEEP="$((KEEP+1))"
-					if [ ! -d "$STOR" ] ;then mkdir -p "$STOR";chmod 0700 "$STOR" ;fi
+					if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then KEEP="1" ;fi ;KEEP=$((KEEP+1))
+					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR ;fi
 
 					#generate new archive
 					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
-					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" "$TARG"/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
+					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
 					ARCH="";printf "\n"
 
 					#remove all pets beyond desired KEEP by date
-					find "$STOR" -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
+					find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
 
 				#error when no files found in TARG
 				else printroutine 9 pet sync
@@ -194,21 +197,21 @@ stoproutine() { TLST="$1"
 }
 
 
-mountroutine() { printroutine 6 "$NAME";mkdir -p "$TARG"
+mountroutine() { printroutine 6 "$NAME";mkdir -p $TARG
 
 	#if pet is encrypted, check support for fs and dmcrypt
-	if [ "$ENCR" = yes ] ;then
-		if [ ! "$(command -v mkfs."$FSFS")" ] ;then printroutine 15 mkfs."$FSFS"
+	if [ $ENCR = yes ] ;then
+		if [ ! "$(command -v mkfs.$FSFS)" ] ;then printroutine 15 mkfs.$FSFS
 		elif [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
 		else
 
 			#use TYPE to set up path for loop device location
 			PTAH="$RAMD"/"$NAME";mkdir -p "$PTAH"
-			mount -t "$TYPE" pets "$PTAH" -o size="${SIZE}"M
+			mount -t $TYPE pets "$PTAH" -o size=${SIZE}M
 			chmod 700 "$PTAH"
 
 			#creation of loop file
-			dd if=/dev/urandom of="$PTAH"/"$NAME" bs=1M count="$SIZE" >/dev/null 2>&1 & pidroutine "$!" randomizing
+			dd if=/dev/urandom of="$PTAH"/"$NAME" bs=1M count=$SIZE >/dev/null 2>&1 & pidroutine "$!" randomizing
 
 			#get next available loop device and use it for loop file
 			LOOP=$(losetup -f);losetup "$LOOP" "$PTAH/$NAME"
@@ -218,33 +221,33 @@ mountroutine() { printroutine 6 "$NAME";mkdir -p "$TARG"
 			printf "\n\n";cryptsetup status "$NAME";printf "\n"
 
 			#use badblocks on crypt device if desired
-			if [ "$PARI" = yes ] ;then printroutine 17
+			if [ $PARI = yes ] ;then printroutine 17
 				badblocks -swt random /dev/mapper/"$NAME" >/dev/null 2>&1 & pidroutine "$!" generating
 				printf "\n"
 			fi
 
 			#format crypt device with intended filesystem, then mount
-			mkfs."$FSFS" $FOPT /dev/mapper/"$NAME" >/dev/null 2>&1
-			mount -t "$FSFS" $MOPT /dev/mapper/"$NAME" "$TARG"
+			mkfs.$FSFS $FOPT /dev/mapper/"$NAME" >/dev/null 2>&1
+			mount -t $FSFS $MOPT /dev/mapper/"$NAME" $TARG
 		fi
 	else
 
 		#perform simple mount
-		mount -t "$TYPE" pets "$TARG" -o size="${SIZE}"M $MOPT
+		mount -t $TYPE pets $TARG -o size=${SIZE}M $MOPT
 	fi
 
 	#if mount appears successful, modify target permissions
-	if chkmountroutine ;then chown "$COWN" "$TARG";chmod "$CMOD" "$TARG" ;fi
+	if chkmountroutine ;then chown $COWN $TARG;chmod $CMOD $TARG ;fi
 }
 
 
 unmountroutine() {
 
 	#if TARG is mounted, run advanced before unmount
-	if chkmountroutine ;then advancedroutine stop "$TARG";umount "$TARG"
+	if chkmountroutine ;then advancedroutine stop $TARG;umount $TARG
 
 		#if encrypted, get loop device from status and remove crypt device
-		if [ "$ENCR" = yes ] ;then
+		if [ $ENCR = "yes" ] ;then
 			LOOP="$(cryptsetup status "$NAME"|grep "device:"|awk '{print $2}')"
 			if [ -n "$LOOP" ] ;then cryptsetup remove "$NAME"
 
@@ -299,6 +302,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 	#if stop received, reverse args order and set ACTN accordingly. start cycle
 	if [ "$1" = "umount" ] ;then ACTN="dismounting";ARGS="$(revroutine "$ARGS")" ;fi
+
 	for mnts in $ARGS ;do
 
 		#develop vars from MNTC args
@@ -338,7 +342,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 						#if second :token of item is a dir, mount dev. if hyphon, skip
 						if [ -d "$DIRC" ] ;then printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
-							"$1" "$DEVC" "$DIRC";chown "$COWN" "$DIRC"
+							"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
 						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
 						fi
 
@@ -386,7 +390,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 					fi
 
 					printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
-					"$1" "$DEVC" "$DIRC";chown "$COWN" "$DIRC"
+					"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
 				fi
 			elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
 			fi
@@ -399,7 +403,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 advsrvcroutine() {
 
 	#if stop received, reverse arg order. set ACTN accordingly
-	if [ "$1" = "stop" ] ;then SRVC="$(revroutine "$SRVC")";ACTN="Stopping" ;else ACTN="Restarting" ;fi
+	if [ "$1" = "stop" ] ;then SRVC="$(revroutine $SRVC)";ACTN="Stopping" ;else ACTN="Restarting" ;fi
 
 	#cycle list and set init system from token, otherwise set as init
 	for item in $SRVC ;do INIT="$(echo "$item"|awk -F':' '{print $2}')";INIT="${INIT:-init}"
@@ -418,16 +422,35 @@ advsrvcroutine() {
 loadpetroutine() { CONF="$PETS/cage/$1"
 
 	#if arg is a readable file and TRGT is not root(/), and has no // or null char
-	if [ -r "$CONF" ] && [ -n "$(grep ^TARG= "$CONF"|awk -F"=" '{print $2}'|grep -E '^/([^/\0]+(/)?)+$')" ] ;then
+	if [ -r "$CONF" ] && [ -n "$(grep ^TARG= "$CONF"|awk -F"=" '{print $2}'|grep -E '^\"/([^/\0]+(/)?)+\"$')" ] ;then
 
 		#set defaults of pet file vars, then include specified pet
-		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS"/store
+		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
 		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
 
 	#error if no pet found
 	else printroutine 13 "$1";fi
 }
 
+fixpetroutine() { #temporary function to ensure all pet file vars are quoted
+
+	#save in hold buff, remove everything before #, swap with hold buff, remove comment
+	EXP1="h;s/[^#]*//1;x;s/#.*//"
+	#insert " after 5th postion every line
+	EXP2="s/./&\"/5"
+	#insert " and end of every line
+	EXP3="s/$/\"/g"
+	#reduce any amount of " to a single occurance
+	EXP4="s/([\"])+/\"/g"
+	#remove leading "
+	EXP5="s/^\"//"
+	#fix enabled, empty vars with missing quote eg VAR="
+	EXP6="s/\=\"$/\=\"\"/g"
+	#append newline and hold buff, remove last newline
+	EXP7="G;s/(.*)\n/\1/"
+	#perform operation
+	sed -i -r ''"$EXP1"';'"$EXP2"';'"$EXP3"';'"$EXP4"';'"$EXP5"';'"$EXP6"';'"$EXP7"'' "$1"
+}
 
 #true if TARG contains any files
 chkfilesroutine() { CHK1="$(find $TARG -maxdepth 1|wc -l)" >/dev/null 2>&1
@@ -460,10 +483,10 @@ pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "
 #give spinning timer wheel to functions
 rotating() {
 	case $TOGO in
-		1) printf '%s\r'"$HM "'('"$TARG"') \ '${GR}"$1"${GR}${GR}' \ ('$(($(date +%s)-SECS))'s)';TOGO="2";;
-		2) printf '%s\r'"$HM "'('"$TARG"') | '${GR}${GR}"$1"${GR}' | ('$(($(date +%s)-SECS))'s)';TOGO="3";;
-		3) printf '%s\r'"$HM "'('"$TARG"') / '${GR}${GR}${GR}"$1"' / ('$(($(date +%s)-SECS))'s)';TOGO="4";;
-		*) printf '%s\r'"$HM "'('"$TARG"') - '"$1"${GR}${GR}${GR}' - ('$(($(date +%s)-SECS))'s)';TOGO="1";;
+		1) printf '%s\r'"$HM "'('$TARG') \ '${GR}"$1"${GR}${GR}' \ ('$(($(date +%s)-SECS))'s)';TOGO="2";;
+		2) printf '%s\r'"$HM "'('$TARG') | '${GR}${GR}"$1"${GR}' | ('$(($(date +%s)-SECS))'s)';TOGO="3";;
+		3) printf '%s\r'"$HM "'('$TARG') / '${GR}${GR}${GR}"$1"' / ('$(($(date +%s)-SECS))'s)';TOGO="4";;
+		*) printf '%s\r'"$HM "'('$TARG') - '"$1"${GR}${GR}${GR}' - ('$(($(date +%s)-SECS))'s)';TOGO="1";;
 	esac
 }
 

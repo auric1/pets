@@ -2,38 +2,38 @@
 ########### CONFIG #
 ####################
 # is this pet enabled or not? use 'yes' to enable
-USED=no
+USED="no"
 # using 'yes' will enable this pet during boot (no tty)
-BOOT=no
+BOOT="no"
 # target path for final fs ?
-TARG=/home/mail
+TARG="/home/mail"
 # ramfs or tmpfs? default = tmpfs (tip: ramfs does not SWAP!)
-TYPE=ramfs
+TYPE="ramfs"
 # size, in MB!! default = 512
-SIZE=120
+SIZE="120"
 # target path permissions ? default = root:root / 0644
-COWN=mail:mail
-CMOD=0700
+COWN="mail:mail"
+CMOD="0700"
 # additional mount options. ***!must include the -o switch ***!*** ramfs can not do data options!*** 
-MOPT=""
+#MOPT=""
 ####################
 ########## PERSIST #
 ####################
 # where are the ramdisk archives stored?? default = /etc/pets/store
-STOR=/root/crypto/petstore
+STOR="/root/crypto/petstore"
 # how many archives to retain? default = 1
-KEEP=10
+KEEP="10"
 # tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
 TOPT="--exclude=/home/mail/dump/* --exclude=/home/mail/test1/*--exclude=/home/mail/lost+found"
 ####################
 ########## ENCRYPT #
 ####################
 # do we want an encrypted fs?. use 'yes' to enable
-ENCR=yes
+ENCR="yes"
 # additional parity with badblocks. use 'yes' to enable
-PARI=yes
+PARI="yes"
 # which regular filesystem to use? as needed by `mkfs.*` ie. reiser4, xfs or ext4
-FSFS=reiserfs
+FSFS="reiserfs"
 # additional fs options. switches vary between fs..
 FOPT="-q -l hardpet"
 # cryptsetup options. randomized via /dev/urandom. default cipher: aes-cbc-essiv:sha256
