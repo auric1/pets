@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.6f
+# version 0.7a
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -28,8 +28,8 @@ listroutine() { CAGE="$PETS/cage";LIST=""
 	for file in $TLST ;do ITEM="$(basename $file)"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 
-			#temporary function to ensure all pet file vars are quoted
-			fixpetroutine "$file"
+			#ensure all pet file vars are quoted
+			fixpetroutine quotes "$file"
 
 			#and file exists and USED equals yes
 			if [ -f "$file" ] && grep -q ^USED=\"yes\" "$file" ;then
@@ -76,8 +76,8 @@ displayroutine() {
 				elif [ $TYPE = ramfs ] ;then
 
 					#calc available space with du and format percentage
-					DUAV="$(du -xsh -B 1M $TARG|cut -f1);AVAL=$(echo "$SIZE - $DUAV"|bc)"
-					PERC="$(printf "%.0f%%" $(echo "scale=1; $USED*100/$SIZE"|bc))"
+					DUAV="$(du -xsh -B 1M $TARG|cut -f1)";AVAL="$(echo "$SIZE - $DUAV"|bc)"
+					PERC="$(printf "%.0f%%" $(echo "scale=1; ${DUAV}*100/${SIZE}"|bc))"
 
 					#replicate human readable suffixes of df before print (M/G)
 					for sufx in "$DUAV" "$AVAL" $SIZE ;do
@@ -271,15 +271,6 @@ unmountroutine() {
 }
 
 
-killingroutine() {
-
-	#generate list of pids in use under supplied target
-	for prox in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$prox"|cut -c2-)" ;done
-
-	#cycle list after duplicates removed, to kill remainders
-	for klll in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$1" "$klll";kill -9 "$klll" ;done
-}
-
 
 advancedroutine() {
 
@@ -295,6 +286,25 @@ advancedroutine() {
 			if [ "$(command -v lsof)" ] ;then killingroutine "$2" ;else printroutine 15 lsof ;fi
 			if [ -n "$MNTC" ] ;then advmntcroutine umount "$MNTC" ;fi ;;
 	esac
+}
+
+
+advsrvcroutine() {
+
+	#if stop received, reverse arg order. set ACTN accordingly
+	if [ "$1" = "stop" ] ;then SRVC="$(revroutine $SRVC)";ACTN="Stopping" ;else ACTN="Restarting" ;fi
+
+	#cycle list and set init system from token, otherwise set as init
+	for item in $SRVC ;do INIT="$(echo "$item"|awk -F':' '{print $2}')";INIT="${INIT:-init}"
+
+		#while init remains and service file is executable, issue command arg
+		if [ "$INIT" = init ] ;then if [ -x /etc/init.d/"$item" ] ;then /etc/init.d/"$item" "$1" ;fi
+
+		#if set to systemd, ensure correctness of vars, then manipulate systemctl
+		else INIT="$(echo "$item"|awk -F':' '{print $1}')";item="$(echo "$item"|awk -F':' '{print $2}')"
+			if [ "$INIT" = systemd ] ;then printroutine 12 "$ACTN" "$item";systemctl "$1" "$item" ;fi
+		fi
+	done
 }
 
 
@@ -400,57 +410,183 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 }
 
 
-advsrvcroutine() {
-
-	#if stop received, reverse arg order. set ACTN accordingly
-	if [ "$1" = "stop" ] ;then SRVC="$(revroutine $SRVC)";ACTN="Stopping" ;else ACTN="Restarting" ;fi
-
-	#cycle list and set init system from token, otherwise set as init
-	for item in $SRVC ;do INIT="$(echo "$item"|awk -F':' '{print $2}')";INIT="${INIT:-init}"
-
-		#while init remains and service file is executable, issue command arg
-		if [ "$INIT" = init ] ;then if [ -x /etc/init.d/"$item" ] ;then /etc/init.d/"$item" "$1" ;fi
-
-		#if set to systemd, ensure correctness of vars, then manipulate systemctl
-		else INIT="$(echo "$item"|awk -F':' '{print $1}')";item="$(echo "$item"|awk -F':' '{print $2}')"
-			if [ "$INIT" = systemd ] ;then printroutine 12 "$ACTN" "$item";systemctl "$1" "$item" ;fi
-		fi
-	done
-}
-
-
 loadpetroutine() { CONF="$PETS/cage/$1"
+		if fixpetroutine pre "$CONF" ;then
 
-	#if arg is a readable file and TRGT is not root(/), and has no // or null char
-	if [ -r "$CONF" ] && [ -n "$(grep ^TARG= "$CONF"|awk -F"=" '{print $2}'|grep -E '^\"/([^/\0]+(/)?)+\"$')" ] ;then
+			#set defaults of pet file vars, then include specified pet
+			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
+			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
+			fixpetroutine post
 
-		#set defaults of pet file vars, then include specified pet
-		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
-		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
-
-	#error if no pet found
-	else printroutine 13 "$1";fi
+		#error if no pet found
+		else printroutine 13 "$1"
+	fi
 }
 
-fixpetroutine() { #temporary function to ensure all pet file vars are quoted
+fixpetroutine() {
+	case "$1" in
+		quotes)	#ensure all pet file vars are quoted
 
-	#save in hold buff, remove everything before #, swap with hold buff, remove comment
-	EXP1="h;s/[^#]*//1;x;s/#.*//"
-	#insert " after 5th postion every line
-	EXP2="s/./&\"/5"
-	#insert " and end of every line
-	EXP3="s/$/\"/g"
-	#reduce any amount of " to a single occurance
-	EXP4="s/([\"])+/\"/g"
-	#remove leading "
-	EXP5="s/^\"//"
-	#fix enabled, empty vars with missing quote eg VAR="
-	EXP6="s/\=\"$/\=\"\"/g"
-	#append newline and hold buff, remove last newline
-	EXP7="G;s/(.*)\n/\1/"
-	#perform operation
-	sed -i -r ''"$EXP1"';'"$EXP2"';'"$EXP3"';'"$EXP4"';'"$EXP5"';'"$EXP6"';'"$EXP7"'' "$1"
+			#save in hold buff, remove everything before #, swap with hold buff, remove comment
+			EXP1="h;s/[^#]*//1;x;s/#.*//"
+			#remove all single and double quotes
+			EXP2="s/['\"]//g"
+			#insert " after 5th postion every line
+			EXP3="s/./&\"/5"
+			#insert " and end of every line
+			EXP4="s/$/\"/g"
+			#reduce any amount of " to a single occurance
+			EXP5="s/([\"])+/\"/g"
+			#remove leading "
+			EXP6="s/^\"//"
+			#fix enabled, empty vars with missing quote eg VAR="
+			EXP7="s/\=\"$/\=\"\"/g"
+			#append newline and hold buff, remove last newline
+			EXP8="G;s/(.*)\n/\1/"
+
+			#perform operation
+			sed -i -r ''"$EXP1"';'"$EXP2"';'"$EXP3"';'"$EXP4"';'"$EXP5"';'"$EXP6"';'"$EXP7"';'"$EXP8"'' "$2"
+		;;
+
+		pre) # rejects loading pet if any of these vars have critical format errors
+
+			#reset failed state var. start read on pet file vars
+			PFLD="";BASE="$(basename $CONF)"
+			while IFS="=" read pvar valu ;do
+				if echo "$pvar"|grep -Eq '^[[:alpha:]]{4}$' ;then valu="$(echo $valu|sed 's/\"//g')"
+					case "$pvar" in
+
+						TARG) #no null
+							if echo $valu|grep -Eq '\0' ;then PFLD="1"
+								printroutine 98 "$(BASE) $pvar invalid setting. no null char allowed"
+							fi
+						;;
+
+						STOR) #no null
+							if echo $valu|grep -Eq '\0' ;then PFLD="1"
+								printroutine 98 "($BASE) $pvar invalid setting. no null char allowed"
+							fi
+						;;
+
+						COWN) #word:word - contain semi
+							if ! echo $valu|grep -Eq '^[[:alnum:]]+\:[[:alnum:]]+$' ;then PFLD="1"
+								printroutine 98 "($BASE) $pvar invalid setting. must be 'user:group'"
+							fi
+						;;
+
+						CMOD) #numeric of 3 or 4 chars
+							if ! echo $valu|grep -Eq '^[[:digit:]]{3,4}$' ;then PFLD="1"
+								printroutine 98 "($BASE) $pvar invalid setting. must be 3 or 4 digits only"
+							fi
+						;;
+
+						SRVC) # (systemd:)?service ,repeated, match all. iterate for token-specific output
+							for ptok in $valu ;do
+								if ! echo "$ptok"|grep -Eq '^(systemd\:)?([A-Za-z0-9_.-])+$' ;then PFLD="1"
+									printroutine 98 "($BASE) $pvar invalid token: $ptok"
+								fi
+							done
+						;;
+
+						MNTC) # (/dev/path|UUID):(-|/path)(:-|:/path) ,repeated, match all. iterate for token-specific output
+							for ptok in $valu ;do
+								#match /dev/path|UUID
+								MTK1="^(/dev/[0-9a-zA-Z_./\-]+|[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12})"
+								#match : and -|/path
+								MTK2=":(-|\/[0-9a-zA-Z_./]+)"
+								#match optional :-|/path
+								MTK3="(\:-|\:[0-9a-zA-Z_./]+)?$"
+								if ! echo "$ptok"|grep -Eq "^${MTK1}${MTK2}${MTK3}" ;then PFLD="1"
+									printroutine 98 "($BASE) $pvar invalid token: $ptok"
+								fi
+							done
+						;;
+					esac
+				fi
+			done < "$2"
+
+			#get boolean on failed state
+			if [ "$PFLD" = "1" ] ;then return 1;else return 0;fi
+		;;
+
+		post) #attempts to fix minor format errors in pet file variables
+			PVAR="TYPE SIZE KEEP ENCR PARI TOPT COPT TARG STOR"
+			for pfix in $PVAR ;do
+				case $pfix in
+
+					TARG) #reduce any amount of / to 1. trailing / not required
+						if echo $TARG|grep -Eq '\/\/' ;then
+							printroutine 99 "($TARG) $pfix removing multiple slashes. now set to: $TARG"
+							TARG="$(echo $TARG|sed -r 's/([\/])+/\//g')"
+						fi
+						if echo $TARG|grep -Eq '*\/$' ;then TARG="$(echo $TARG|sed 's/\/$//')"
+							printroutine 99 "($TARG) $pfix removing trailing slash. now set to: $TARG"
+						fi
+					;;
+
+					STOR) #trailing / not required
+						if echo $STOR|grep -Eq '*\/$' ;then STOR="$(echo $STOR|sed 's/\/$//')"
+							printroutine 99 "($TARG) $pfix removing trailing slash. now set to: $STOR"
+						fi
+					;;
+
+					TYPE) #if not ramfs/tmpfs, use tmpfs
+						if ! echo $TYPE|grep -Eq '^([rR][aA][mM]|[tT][mM][pP])[fF][sS]$' ;then TYPE="tmpfs"
+							printroutine 99 "($TARG) $pfix must be tmpfs or ramfs. now set to: $TYPE"
+						fi
+					;;
+
+					SIZE) #if alpha found strip and give warning
+						if [ ! -z "$(echo $SIZE|sed 's/[0-9]*//g')" ] ;then SIZE="$(echo $SIZE|sed 's/[^0-9]*//g')"
+							printroutine 99 "($TARG) $pfix must not contain anything but numbers. now set to: $SIZE"
+						fi
+					;;
+
+					KEEP) #if alpha found strip and give warning
+						if [ ! -z "$(echo $KEEP|sed 's/[0-9]*//g')" ] ;then KEEP="$(echo $KEEP|sed 's/[^0-9]*//g')"
+							printroutine 99 "($TARG) $pfix must not contain anything but numbers. now set to: $KEEP"
+						fi
+					;;
+
+					ENCR) #if not yes/no, use no
+						if ! echo $ENCR|grep -Eq '^([yY][eE][sS]|[nN][oO])$' ;then ENCR="no"
+							printroutine 99 "($TARG) $pfix must be yes or no. now set to: no"
+						fi
+					;;
+
+					PARI) #if not yes/no, use no
+						if ! echo $PARI|grep -Eq '^([yY][eE][sS]|[nN][oO])$' ;then PARI="no"
+							printroutine 99 "($TARG) $pfix must be yes or no. using: no"
+						fi
+					;;
+
+					TOPT) #inherent options not required - remove them
+						INHT="\-\-ignore\-failed\-read \-\-absolute\-names \-\-lzop"
+						for fixn in $INHT ;do
+							if echo $TOPT|grep -q $fixn ;then
+								printroutine 99 "($TARG) $pfix remove inherent option: '$(echo $fixn|sed 's/\\*//g')'"
+								TOPT="$(echo $TOPT|sed -r 's/\"//g;s/'"$fixn"'//g')"
+							fi
+						done
+						INHT=""
+					;;
+
+					COPT) #inherent options not required - remove them
+						INHT="create \-d \/dev\/urandom"
+						for fixn in $INHT ;do
+							if echo $COPT|grep $fixn ;then
+								printroutine 99 "($TARG) $pfix remove inherent option '$(echo $fixn|sed 's/\\*//g')'"
+								COPT="$(echo $COPT|sed -r 's/\"//g;s/'"$fixn"'//g')"
+							fi
+						done
+						INHT=""
+					;;
+				esac
+			done
+		;;
+	esac
 }
+
 
 #true if TARG contains any files
 chkfilesroutine() { CHK1="$(find $TARG -maxdepth 1|wc -l)" >/dev/null 2>&1
@@ -480,6 +616,16 @@ revroutine() { echo "$@"|awk '{for (revr=NF; revr>1; revr--) printf("%s ",$revr)
 pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "$2";sleep 1;done ;}
 
 
+killingroutine() {
+
+	#generate list of pids in use under supplied target
+	for prox in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$prox"|cut -c2-)" ;done
+
+	#cycle list after duplicates removed, to kill remainders
+	for klll in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$1" "$klll";kill -9 "$klll" ;done
+}
+
+
 #give spinning timer wheel to functions
 rotating() {
 	case $TOGO in
@@ -494,7 +640,7 @@ rotating() {
 printroutine() {
 
 	#if we have an active terminal, use color
-        if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
+        if [ -d "$RAMD" ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
 		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
@@ -503,25 +649,26 @@ printroutine() {
         case "$1" in
 	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
 	        1)	echo "$OK" 'Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
-	        2)	echo "$NO" '('$TARG')' 'this path already has a pets things in it'${RD}${RD} ;;
-	        3)	echo "$OK" '('$TARG')' 'syncing files: '"$2"' -> '"$3"${GR}${GR} ;;
-	        4)	echo "$OK" '('$TARG')' 'completed!'${GR}${GR} ;;
-	        6)	echo "$OK" '('$TARG')' 'mounting ('"$2"') as: '"$TYPE"'. going to work'${GR}${GR} ;;
-	        7)	echo "$OK" '('$TARG')' 'removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
-	        8)	echo "$OK" '('$TARG')' 'released loop device:' "${LOOP}"${GR}${GR} ;;
-	        9)	echo "$NO" '('$TARG')' 'no '"$2"'s in there to '"$3"'??'${RD}${RD} ;;
+	        2)	echo "$NO" '('$TARG') this path already has a pets things in it'${RD}${RD} ;;
+	        3)	echo "$OK" '('$TARG') syncing files: '"$2"' -> '"$3"${GR}${GR} ;;
+	        4)	echo "$OK" '('$TARG') completed!'${GR}${GR} ;;
+	        6)	echo "$OK" '('$TARG') mounting ('"$2"') as: '"$TYPE"'. going to work'${GR}${GR} ;;
+	        7)	echo "$OK" '('$TARG') removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
+	        8)	echo "$OK" '('$TARG') released loop device:' "${LOOP}"${GR}${GR} ;;
+	        9)	echo "$NO" '('$TARG') no '"$2"'s in there to '"$3"'??'${RD}${RD} ;;
 		10)	echo "$NO" '('"$2"') '${HR}' not mounted!' ${RD}${RD} ;;
-		11)	echo "$HM" '('$TARG')' 'skip '"$2"' device: '"$3"'' ;;
+		11)	echo "$HM" '('$TARG') skip '"$2"' device: '"$3"'' ;;
 		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
 	        13)	echo "$NO" 'no valid pets by the name of:' "${2}"${RD}${RD} ;;
 	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
 		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
-		16)	echo "$NO" '('$TARG')' 'looks like this pet is already mounted'${RD}${RD} ;;
-		17)	echo "$OK" '('$TARG')' 'using badblocks to create additional parity'${GR}${GR} ;;
-		18)	echo "$OK" '('$TARG')' "$2" "$3" "$4" "$5"${GR}${GR} ;;
-		19)	echo "$HM" '('"$2"')' 'issuing a kill on pid ('"$3"') '${RD}${RD} ;;
+		16)	echo "$NO" '('$TARG') looks like this pet is already mounted'${RD}${RD} ;;
+		17)	echo "$OK" '('$TARG') using badblocks to create additional parity'${GR}${GR} ;;
+		18)	echo "$OK" '('$TARG') '"$2" "$3" "$4" "$5"${GR}${GR} ;;
+		19)	echo "$HM" '('"$2"') issuing a kill on pid ('"$3"') '${RD}${RD} ;;
 		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
 		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5''${FS}''$6' used with '$7' free of '$8')'${GR}${GR} ;;
+		98)	echo "$NO" "$(echo "$2"|tr '\n' ' ')" ;;
 		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
 		*)	echo "$HM" "$@" ;;
 	esac
@@ -535,3 +682,4 @@ case "$1" in
 	list)		listroutine display "$2";;
 	*)		if [ ! -n "$2" ] ;then listroutine display ;else printroutine 0 ;fi;exit;;
 esac
+

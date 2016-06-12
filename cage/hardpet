@@ -24,7 +24,7 @@ STOR="/root/crypto/petstore"
 # how many archives to retain? default = 1
 KEEP="10"
 # tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
-TOPT="--exclude=/home/mail/dump/* --exclude=/home/mail/test1/*--exclude=/home/mail/lost+found"
+TOPT="--exclude=/home/mail/dump/* --exclude=/home/mail/test1/* --exclude=/home/mail/lost+found"
 ####################
 ########## ENCRYPT #
 ####################
