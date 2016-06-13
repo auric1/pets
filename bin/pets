@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7a
+# version 0.7b
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -66,7 +66,7 @@ displayroutine() {
 	#cycle pets list, if mounted show stats
 	if [ "$LIST" != "none!" ] ;then
 		for disp in $LIST ;do loadpetroutine "$disp"
-			if chkmountroutine ;then STAT=""
+			if mountpoint -q $TARG ;then STAT=""
 
 				#encrypted or tmpfs, grab stats from df. use du for ramfs
 				if [ $ENCR = yes ] || [ $TYPE = tmpfs ] ;then
@@ -103,11 +103,11 @@ startroutine() { TLST="$1"
 			if [ "$NAME" ] ;then
 
 				#mount pet only if TARG is empty and if not already mounted
-				if chkfilesroutine ;then printroutine 2
-				elif ! chkmountroutine ;then mountroutine
+				if [ "$(ls -A $TARG)" ] ;then printroutine 2
+				elif ! mountpoint -q $TARG ;then mountroutine
 
 					#on succesfull mount, find latest archive. create STOR if non-existant
-					if chkmountroutine ;then
+					if mountpoint -q $TARG ;then
 						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printroutine 9 archive start
 						else
 							#establish latest archive file of pet. perform extraction
@@ -117,7 +117,7 @@ startroutine() { TLST="$1"
 								printf "\n"
 
 								#if TARG now has contents, service MNTC/SRVC vars.
-								if chkfilesroutine ;then advancedroutine restart;printroutine 4 ;fi
+								if [ "$(ls -A $TARG)" ] ;then advancedroutine restart;printroutine 4 ;fi
 					 		else
 
 								#error if no archive found
@@ -150,9 +150,8 @@ syncroutine() { TLST="$1"
 			if [ "$NAME" ] ;then
 
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
-				if chkfilesroutine ;then printroutine 3 pet archive
+				if [ "$(ls -A $TARG)" ] ;then printroutine 3 pet archive
 					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
-					if [ -z $KEEP ] || [ $KEEP -eq 0 ] ;then KEEP="1" ;fi ;KEEP=$((KEEP+1))
 					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR ;fi
 
 					#generate new archive
@@ -161,7 +160,7 @@ syncroutine() { TLST="$1"
 					ARCH="";printf "\n"
 
 					#remove all pets beyond desired KEEP by date
-					find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +${KEEP}|xargs rm >/dev/null 2>&1
+					find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
 
 				#error when no files found in TARG
 				else printroutine 9 pet sync
@@ -237,14 +236,14 @@ mountroutine() { printroutine 6 "$NAME";mkdir -p $TARG
 	fi
 
 	#if mount appears successful, modify target permissions
-	if chkmountroutine ;then chown $COWN $TARG;chmod $CMOD $TARG ;fi
+	if mountpoint -q $TARG ;then chown $COWN $TARG;chmod $CMOD $TARG ;fi
 }
 
 
 unmountroutine() {
 
 	#if TARG is mounted, run advanced before unmount
-	if chkmountroutine ;then advancedroutine stop $TARG;umount $TARG
+	if mountpoint -q $TARG ;then advancedroutine stop $TARG;umount $TARG
 
 		#if encrypted, get loop device from status and remove crypt device
 		if [ $ENCR = "yes" ] ;then
@@ -346,7 +345,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 						DEVC="/dev/mapper/$BLKD"
 
 						#do scan for pv/vg/lv devs under newly unlocked crypto
-						if [ "$(command -v vgchange)" ] ;then scanlvroutine
+						if [ "$(command -v vgchange)" ] ;then lvscan >/dev/null 2>&1
 						else printroutine 99 "($TARG) skipping lvm scan. not installed.."
 						fi
 
@@ -588,32 +587,12 @@ fixpetroutine() {
 }
 
 
-#true if TARG contains any files
-chkfilesroutine() { CHK1="$(find $TARG -maxdepth 1|wc -l)" >/dev/null 2>&1
-        if [ "$CHK1" -ge 2 ] ;then return 0 ;else return 1 ;fi
-}
-
-
-#true if TARG is already mounted
-chkmountroutine() { CHK2="$(mount|grep " $TARG "|awk '{print $3}')" >/dev/null 2>&1
-	if [ -n "$CHK2" ] ;then return 0 ;else return 1 ;fi
-}
-
-
 #true if arg matches ^/dev/mapper/*-*
-chklvroutine() { if test "${1#/dev/mapper/*-*}" != "$1" ;then return 0 ;else return 1 ;fi ;}
-
-
-#initiate system-wide scan for lv devices
-scanlvroutine() { pvscan >/dev/null 2>&1;vgscan >/dev/null 2>&1;lvscan >/dev/null 2>&1 ;}
+chklvroutine() { if expr "$1" : '/dev/mapper/.*-.*' >/dev/null 2>&1 ;then return 0 ;else return 1 ;fi ;}
 
 
 #reverse order of space-delimited args in a string
 revroutine() { echo "$@"|awk '{for (revr=NF; revr>1; revr--) printf("%s ",$revr); print $revr;}' ;}
-
-
-#rotate while given pid is active pass secs var for timer
-pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "$2";sleep 1;done ;}
 
 
 killingroutine() {
@@ -622,8 +601,12 @@ killingroutine() {
 	for prox in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$prox"|cut -c2-)" ;done
 
 	#cycle list after duplicates removed, to kill remainders
-	for klll in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$1" "$klll";kill -9 "$klll" ;done
+	for klll in $(printf '%s\n' "$PIDS"|sort -u) ;do printroutine 19 "$1" "$klll";kill -9 "$klll" ;done; sleep 1
 }
+
+
+#rotate while given pid is active pass secs var for timer
+pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "$2";sleep 1;done ;}
 
 
 #give spinning timer wheel to functions
@@ -639,7 +622,7 @@ rotating() {
 
 printroutine() {
 
-	#if we have an active terminal, use color
+	#try to use color
         if [ -d "$RAMD" ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
 		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
