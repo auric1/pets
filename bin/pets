@@ -1,12 +1,13 @@
 #! /bin/sh
-# version 0.7b
+# version 0.7c
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
 PETS=/etc/pets
 RAMD=/dev/shm/pets
-dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
-	elif [ $DEBG = log ] ;then LOGS=$PETS/log;LOGF=$LOGS/pets.log
+dbg() {	case "$DEBG" in
+	1)	printroutine debug: "$@" ;;
+	log)	LOGS=$PETS/log;LOGF=$LOGS/pets.log
 		if [ ! -d $LOGS ] || [ ! -r $LOGF ] ;then mkdir $LOGS;touch $LOGF;chmod 0755 $LOGF ;fi
 		if [ "$(wc -l $LOGF|awk '{print $1}')" -gt 1000 ] ;then
 			LOGN="$(find $LOGS -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
@@ -14,7 +15,8 @@ dbg() { if [ $DEBG = 1 ] ;then printroutine debug: "$@"
 			mv $LOGF "$LOGF.$LOGN";touch $LOGF;chmod 0755 $LOGF
 		fi
 		echo "$(date +"%b %d %T")" "$@" >> $LOGF
-	fi
+	;;
+	esac
 }
 
 
@@ -74,17 +76,19 @@ displayroutine() {
 					STAT="$(df -Ph|grep -v "$RAMD"|grep $TARG|head -n1|awk '{print $5,$3,$4,$2}')"
 					printroutine 21 "$disp" $TYPE $TARG $STAT
 				elif [ $TYPE = ramfs ] ;then
+					if [ ! "$(command -v bc)" ] ;then printroutine 15 bc
+					else
+						#calc available space with du and format percentage
+						DUAV="$(du -xsh -B 1M $TARG|cut -f1)";AVAL="$(echo "$SIZE - $DUAV"|bc)"
+						PERC="$(printf "%.0f%%" $(echo "scale=1; ${DUAV}*100/${SIZE}"|bc))"
 
-					#calc available space with du and format percentage
-					DUAV="$(du -xsh -B 1M $TARG|cut -f1)";AVAL="$(echo "$SIZE - $DUAV"|bc)"
-					PERC="$(printf "%.0f%%" $(echo "scale=1; ${DUAV}*100/${SIZE}"|bc))"
-
-					#replicate human readable suffixes of df before print (M/G)
-					for sufx in "$DUAV" "$AVAL" $SIZE ;do
-						if [ "$sufx" -gt 999 ] ;then STAT="$STAT $(printf "%.1f" $(echo "scale=2; ${sufx}/1024"|bc))G"
-						else STAT="$STAT ${sufx}M" ;fi
-					done
-					printroutine 21 "$disp" "$TYPE" $TARG "$PERC" $STAT
+						#replicate human readable suffixes of df before print (M/G)
+						for sufx in "$DUAV" "$AVAL" $SIZE ;do
+							if [ "$sufx" -gt 999 ] ;then STAT="$STAT $(printf "%.1f" $(echo "scale=2; ${sufx}/1024"|bc))G"
+							else STAT="$STAT ${sufx}M" ;fi
+						done
+						printroutine 21 "$disp" "$TYPE" $TARG "$PERC" $STAT
+					fi
 				fi
 
 			#if pet isnt mounted
@@ -151,10 +155,10 @@ syncroutine() { TLST="$1"
 
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
 				if [ "$(ls -A $TARG)" ] ;then printroutine 3 pet archive
-					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
 					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR ;fi
 
 					#generate new archive
+					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
 					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
 					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
 					ARCH="";printf "\n"
@@ -331,76 +335,78 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 			if [ -n "$KEYC" ] ;then
 				if [ ! "$(command -v cryptsetup)" ] ;then printroutine 15 cryptsetup
 				else BLKD="$(basename $DEVC)"
+					case "$1" in
+						mount)
 
-					if [ "$1" = "mount" ] ;then
-
-						#if third :token of item is a file, use it as a key. if hyphon, ask user passphrase
-						if [ -f "$KEYC" ] ;then KEYC="-d $KEYC"
-						elif [ "$KEYC" = "-" ] ;then KEYC="-y"
-						else printroutine 99 "($DEVC) '$KEYC' not found or bad entry" ;exit 1
-						fi
-
-						#luksopen, then set devc to crypto dev name
-						printroutine 99 "($TARG) luksOpen on '$BLKD': $(cryptsetup -v $KEYC luksOpen $DEVC $BLKD 2>&1)"
-						DEVC="/dev/mapper/$BLKD"
-
-						#do scan for pv/vg/lv devs under newly unlocked crypto
-						if [ "$(command -v vgchange)" ] ;then lvscan >/dev/null 2>&1
-						else printroutine 99 "($TARG) skipping lvm scan. not installed.."
-						fi
-
-						#if second :token of item is a dir, mount dev. if hyphon, skip
-						if [ -d "$DIRC" ] ;then printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
-							"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
-						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
-						fi
-
-					elif [ "$1" = "umount" ] ;then
-
-						#generate list of potential lv matching /dev/mapper/X-* from args
-						for lv in $(echo "${ARGS%% "$DEVC"*}") ;do LARG="$(echo $lv|cut -f 1 -d ":")"
-							if chklvroutine "$LARG" ;then
-								LARG="$(basename $LARG|cut -f 1 -d "-")"
-								LVMS="$LVMS $LARG"
+							#if third :token of item is a file, use it as a key. if hyphon, ask user passphrase
+							if [ -r "$KEYC" ] ;then KEYC="-d $KEYC"
+							elif [ "$KEYC" = "-" ] ;then KEYC="-y"
+							else printroutine 99 "($DEVC) '$KEYC' not found or bad entry" ;exit 1
 							fi
-						done
 
-						#process list to disable vg individually avoiding conflict with non-PETS/system vg
-						if [ -n "$LVMS" ] ;then
-							if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
-							else	for vg in $(printf '%s\n' $LVMS|sort -u) ;do
-									if [ -d "/dev/$vg" ] ;then
-										printroutine 99 "($TARG) $(vgchange -a n $vg 2>&1)"
-									fi
-								done
+							#luksopen, then set devc to crypto dev name
+							printroutine 99 "($TARG) luksOpen on '$BLKD': $(cryptsetup -v $KEYC luksOpen $DEVC $BLKD 2>&1)"
+							DEVC="/dev/mapper/$BLKD"
+
+							#do scan for pv/vg/lv devs under newly unlocked crypto
+							if [ "$(command -v vgchange)" ] ;then lvscan >/dev/null 2>&1
+							else printroutine 99 "($TARG) skipping lvm scan. not installed.."
 							fi
-						fi
 
-						#if second :token of item is a dir, unmount dev. if hyphon, skip
-						LVMS="";DEVC="/dev/mapper/$BLKD"
-						if [ -d "$DIRC" ] ;then	printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DIRC"
-						elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
-						fi
-						printroutine 99 "($TARG) luksClose on '$BLKD': $(cryptsetup -v luksClose $BLKD 2>&1)"
-					fi
+							#if second :token of item is a dir, mount dev. if hyphon, skip
+							if [ -d "$DIRC" ] ;then printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
+								"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
+							elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
+							fi
+						;;
+
+						umount)
+							#generate list of potential lv matching /dev/mapper/X-* from args
+							for lv in $(echo "${ARGS%% "$DEVC"*}") ;do LARG="$(echo $lv|cut -f 1 -d ":")"
+								if chklvroutine "$LARG" ;then
+									LARG="$(basename $LARG|cut -f 1 -d "-")"
+									LVMS="$LVMS $LARG"
+								fi
+							done
+
+							#process list to disable vg individually avoiding conflict with non-PETS/system vg
+							if [ -n "$LVMS" ] ;then
+								if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
+								else	for vg in $(printf '%s\n' $LVMS|sort -u) ;do
+										if [ -d "/dev/$vg" ] ;then
+											printroutine 99 "($TARG) $(vgchange -a n $vg 2>&1)"
+										fi
+									done
+								fi
+							fi
+
+							#if second :token of item is a dir, unmount dev. if hyphon, skip
+							LVMS="";DEVC="/dev/mapper/$BLKD"
+							if [ -d "$DIRC" ] ;then	printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DIRC"
+							elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
+							fi
+							printroutine 99 "($TARG) luksClose on '$BLKD': $(cryptsetup -v luksClose $BLKD 2>&1)"
+						;;
+					esac
 				fi
 
 			#if item has no third :token
 			elif [ -d "$DIRC" ] ;then
-				if [ "$1" = "umount" ] ;then printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DEVC"
-				elif [ "$1" = "mount" ] ;then
-
-					#when dev is lv initiate vgchange
-					if chklvroutine "$DEVC" ;then
-						if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
-						else LVVG="$(basename $DEVC|cut -f 1 -d "-")"
-							if [ ! -d "/dev/$LVVG" ] ;then printroutine 99 "($TARG) $(vgchange -a y $LVVG 2>&1)" ;fi
+				case "$1" in
+					mount)
+						#when dev is lv initiate vgchange
+						if chklvroutine "$DEVC" ;then
+							if [ ! "$(command -v vgchange)" ] ;then printroutine 15 lvm2
+							else LVVG="$(basename $DEVC|cut -f 1 -d "-")"
+								if [ ! -d "/dev/$LVVG" ] ;then printroutine 99 "($TARG) $(vgchange -a y $LVVG 2>&1)" ;fi
+							fi
 						fi
-					fi
+						printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
+						"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
+					;;
 
-					printroutine 18 "$ACTN" "$DEVC" to "$DIRC"
-					"$1" "$DEVC" "$DIRC";chown $COWN "$DIRC"
-				fi
+					umount)	printroutine 18 "$ACTN" "$DEVC" from "$DIRC";"$1" "$DEVC" ;;
+				esac
 			elif [ "$DIRC" = "-" ] ;then printroutine 11 "$ACTN" "$DEVC"
 			fi
 		else printroutine 99 "($TARG) can not find block device '$DEVC'"
@@ -414,7 +420,7 @@ loadpetroutine() { CONF="$PETS/cage/$1"
 
 			#set defaults of pet file vars, then include specified pet
 			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
-			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="no";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
+			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="xfs";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
 			fixpetroutine post
 
 		#error if no pet found
@@ -623,7 +629,7 @@ rotating() {
 printroutine() {
 
 	#try to use color
-        if [ -d "$RAMD" ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
+        if [ -t 0 ] ;then HG="$(tput setaf 2)-$(tput sgr 0)";HR="$(tput setaf 1)-$(tput sgr 0)";FS="$(tput setaf 2)/$(tput sgr 0)"
 		NO="[ $(tput setaf 1)no $(tput sgr 0)]";OK="[ $(tput setaf 2)ok $(tput sgr 0)]";HM="[ $(tput setaf 3)?? $(tput sgr 0)]"
 		GR="$(tput setaf 2).$(tput sgr 0)";RD="$(tput setaf 1).$(tput sgr 0)"
         else NO="[ no ]";OK="[ ok ]";HM="[ ?? ]";GR=".";RD="." ;fi
