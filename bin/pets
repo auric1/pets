@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7c
+# version 0.7d
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -160,11 +160,13 @@ syncroutine() { TLST="$1"
 					#generate new archive
 					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
 					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
-					tar --ignore-failed-read --absolute-names --lzop $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
+					TARO="--ignore-failed-read --absolute-names --lzop"
+					tar $TARO $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
 					ARCH="";printf "\n"
 
 					#remove all pets beyond desired KEEP by date
-					find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
+					FNDO="-maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo""
+					find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
 
 				#error when no files found in TARG
 				else printroutine 9 pet sync
@@ -348,7 +350,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 							printroutine 99 "($TARG) luksOpen on '$BLKD': $(cryptsetup -v $KEYC luksOpen $DEVC $BLKD 2>&1)"
 							DEVC="/dev/mapper/$BLKD"
 
-							#do scan for pv/vg/lv devs under newly unlocked crypto
+							#do scan for lv devs under newly unlocked crypto
 							if [ "$(command -v vgchange)" ] ;then lvscan >/dev/null 2>&1
 							else printroutine 99 "($TARG) skipping lvm scan. not installed.."
 							fi
@@ -418,10 +420,12 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 loadpetroutine() { CONF="$PETS/cage/$1"
 		if fixpetroutine pre "$CONF" ;then
 
-			#set defaults of pet file vars, then include specified pet
+			#set defaults of pet file vars
 			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
-			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="xfs";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1";. "$CONF"
-			fixpetroutine post
+			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="xfs";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1"
+
+			#include pet file, check vars
+			fixpetroutine post "$CONF"
 
 		#error if no pet found
 		else printroutine 13 "$1"
@@ -514,8 +518,8 @@ fixpetroutine() {
 			if [ "$PFLD" = "1" ] ;then return 1;else return 0;fi
 		;;
 
-		post) #attempts to fix minor format errors in pet file variables
-			PVAR="TYPE SIZE KEEP ENCR PARI TOPT COPT TARG STOR"
+		post) #load and attempt to fix minor format errors in pet file variables
+			. "$2";PVAR="TYPE SIZE KEEP ENCR PARI TOPT COPT TARG STOR"
 			for pfix in $PVAR ;do
 				case $pfix in
 
@@ -669,6 +673,6 @@ case "$1" in
 	stop)		syncroutine "$2";stoproutine "$2";;
 	sync)		syncroutine "$2";;
 	list)		listroutine display "$2";;
-	*)		if [ ! -n "$2" ] ;then listroutine display ;else printroutine 0 ;fi;exit;;
+	*)		if [ "$2" ] ;then listroutine display ;fi ;printroutine 0;exit ;;
 esac
 
