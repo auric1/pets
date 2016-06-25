@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7e
+# version 0.7f
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -8,7 +8,7 @@ RAMD=/dev/shm/pets
 dbg() {	case "$DEBG" in
 	1)	printroutine debug: "$@" ;;
 	log)	LOGS=$PETS/log;LOGF=$LOGS/pets.log
-		if [ ! -d $LOGS ] || [ ! -r $LOGF ] ;then mkdir $LOGS;touch $LOGF;chmod 0755 $LOGF ;fi
+		if [ ! -d $LOGS -o ! -r $LOGF ] ;then mkdir $LOGS;touch $LOGF;chmod 0755 $LOGF ;fi
 		if [ "$(wc -l $LOGF|awk '{print $1}')" -gt 1000 ] ;then
 			LOGN="$(find $LOGS -type f -name "pets.log*"|sort|tail -n1|cut -f 3 -d ".")"
 			LOGN="${LOGN:-0}";LOGN="$((LOGN+1))"
@@ -22,9 +22,6 @@ dbg() {	case "$DEBG" in
 
 listroutine() { CAGE="$PETS/cage";LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
-
-	#temporary - remove example pets from cage path
-	#for dpet in `ls -A "$CAGE/examples/"` ;do rm -rf "$CAGE/$dpet" ;done
 
 	#get archive filename of supplied pet or form complete list of pet archives
 	TLST="$(find $CAGE -maxdepth 1 -type f -name "${TLST:-*}" -not -path "$CAGE/.*" -not -path "* *"|sort)"
@@ -75,7 +72,7 @@ displayroutine() {
 			if mountpoint -q $TARG ;then STAT=""
 
 				#encrypted or tmpfs, grab stats from df. use du for ramfs
-				if [ $ENCR = yes ] || [ $TYPE = tmpfs ] ;then
+				if [ $ENCR = yes -o $TYPE = tmpfs ] ;then
 					if [ $ENCR = yes ] ;then TYPE="crypt" ;fi
 					STAT="$(df -Ph|grep -v "$RAMD"|grep $TARG|head -n1|awk '{print $5,$3,$4,$2}')"
 					printroutine 21 "$disp" $TYPE $TARG $STAT
@@ -116,7 +113,7 @@ startroutine() { TLST="$1"
 
 					#on succesfull mount, find latest archive. create STOR if non-existant
 					if mountpoint -q $TARG ;then
-						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printroutine 9 archive start
+						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printroutine 9 archive extract
 						else
 							#establish latest archive file of pet. perform extraction
 							ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
@@ -303,15 +300,38 @@ advsrvcroutine() {
 	#if stop received, reverse arg order. set ACTN accordingly
 	if [ "$1" = "stop" ] ;then SRVC="$(revroutine $SRVC)";ACTN="Stopping" ;else ACTN="Restarting" ;fi
 
-	#cycle list and set init system from token, otherwise set as init
-	for item in $SRVC ;do INIT="$(echo "$item"|awk -F':' '{print $2}')";INIT="${INIT:-init}"
+	#cycle list and set unit from token. if no init use rc
+	for stok in $SRVC ;do unit="$(echo "$stok"|awk -F':' '{print $2}')";INIT="${unit:-rc}"
 
 		#while init remains and service file is executable, issue command arg
-		if [ "$INIT" = init ] ;then if [ -x /etc/init.d/"$item" ] ;then /etc/init.d/"$item" "$1" ;fi
+		if [ "$INIT" = rc ] ;then if [ -x /etc/init.d/"$stok" ] ;then /etc/init.d/"$stok" "$1" ;fi
 
 		#if set to systemd, ensure correctness of vars, then manipulate systemctl
-		else INIT="$(echo "$item"|awk -F':' '{print $1}')";item="$(echo "$item"|awk -F':' '{print $2}')"
-			if [ "$INIT" = systemd ] ;then printroutine 12 "$ACTN" "$item";systemctl "$1" "$item" ;fi
+		else INIT="$(echo "$stok"|awk -F':' '{print $1}')"
+
+			#use case for future init system options, and to direct action
+			case "$INIT" in
+				systemd) case $ACTN in
+						Restarting) if ! systemctl --quiet is-active "$unit" ;then
+								systemctl "$1" "$unit" 2>/dev/null
+								if systemctl --quiet is-active "$unit" ;then
+									printroutine 12 "$ACTN" "$unit"
+								else printroutine 22 "$ACTN" "$INIT" "$unit" started
+								fi
+							fi
+						;;
+						Stopping) if systemctl --quiet is-active "$unit" ;then
+								systemctl "$1" "$unit" 2>/dev/null
+								if ! systemctl --quiet is-active "$unit" ;then
+									printroutine 12 "$ACTN" "$unit"
+								else printroutine 22 "$ACTN" "$INIT" "$unit" stopped
+								fi
+							else printroutine 22 "$ACTN" "$INIT" "$unit" started
+							fi
+						;;
+					esac
+				;;
+			esac
 		fi
 	done
 }
@@ -494,23 +514,23 @@ fixpetroutine() {
 						;;
 
 						SRVC) # (systemd:)?service ,repeated, match all. iterate for token-specific output
-							for ptok in $valu ;do
-								if ! echo "$ptok"|grep -Eq '^(systemd\:)?([A-Za-z0-9_.-])+$' ;then PFLD="1"
-									printroutine 98 "($BASE) $pvar invalid token: $ptok"
+							for vtok in $valu ;do
+								if ! echo "$vtok"|grep -Eq '^(systemd\:)?([A-Za-z0-9_.-])+$' ;then PFLD="1"
+									printroutine 98 "($BASE) $pvar invalid token: $vtok"
 								fi
 							done
 						;;
 
 						MNTC) # (/dev/path|UUID):(-|/path)(:-|:/path) ,repeated, match all. iterate for token-specific output
-							for ptok in $valu ;do
+							for vtok in $valu ;do
 								#match /dev/path|UUID
 								MTK1="^(/dev/[0-9a-zA-Z_./\-]+|[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12})"
 								#match : and -|/path
 								MTK2=":(-|\/[0-9a-zA-Z_./]+)"
 								#match optional :-|/path
 								MTK3="(\:-|\:[0-9a-zA-Z_./]+)?$"
-								if ! echo "$ptok"|grep -Eq "^${MTK1}${MTK2}${MTK3}" ;then PFLD="1"
-									printroutine 98 "($BASE) $pvar invalid token: $ptok"
+								if ! echo "$vtok"|grep -Eq "^${MTK1}${MTK2}${MTK3}" ;then PFLD="1"
+									printroutine 98 "($BASE) $pvar invalid token: $vtok"
 								fi
 							done
 						;;
@@ -665,6 +685,7 @@ printroutine() {
 		19)	echo "$HM" '('"$2"') issuing a kill on pid ('"$3"') '${RD}${RD} ;;
 		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
 		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5''${FS}''$6' used with '$7' free of '$8')'${GR}${GR} ;;
+		22)	echo "$NO" "$2"' failed. '"$3"' unit ('"$4"') was not '"$5"${RD}${RD} ;;
 		98)	echo "$NO" "$(echo "$2"|tr '\n' ' ')" ;;
 		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
 		*)	echo "$HM" "$@" ;;
