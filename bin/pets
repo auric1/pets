@@ -24,7 +24,7 @@ listroutine() { CAGE="$PETS/cage";LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
 
 	#temporary - remove example pets from cage path
-	for dpet in `ls -A "$CAGE/examples/"` ;do rm -rf "$CAGE/$dpet" ;done;rm -rf "$CAGE"/example
+	for dpet in `ls -A "$CAGE/examples/"` ;do rm -rf "$CAGE/$dpet" ;done
 
 	#get archive filename of supplied pet or form complete list of pet archives
 	TLST="$(find $CAGE -maxdepth 1 -type f -name "${TLST:-*}" -not -path "$CAGE/.*" -not -path "* *"|sort)"
