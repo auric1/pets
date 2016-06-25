@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7d
+# version 0.7e
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -22,6 +22,9 @@ dbg() {	case "$DEBG" in
 
 listroutine() { CAGE="$PETS/cage";LIST=""
 	if [ ! "$(command -v lzop)" ] ;then printroutine 15 lzop;exit 1 ;fi
+
+	#temporary - remove example pets from cage path
+	for dpet in `ls -A "$CAGE/examples/"` ;do rm -rf "$CAGE/$dpet" ;done;rm -rf "$CAGE"/example
 
 	#get archive filename of supplied pet or form complete list of pet archives
 	TLST="$(find $CAGE -maxdepth 1 -type f -name "${TLST:-*}" -not -path "$CAGE/.*" -not -path "* *"|sort)"
@@ -60,8 +63,9 @@ listroutine() { CAGE="$PETS/cage";LIST=""
 
 displayroutine() {
 	#if pet specified, show vars from file, else show enabled list
-	if [ -n "$2" ] && [ -f "$CAGE/$2" ] ;then LIST="$2"
-		printf "\n";grep -v '^$\|^#' "$CAGE/$2";printf "\n"
+	if [ "$2" ] ;then LIST="$2"
+		if [ -f "$CAGE/$2" ] ;then printf "\n";grep -v '^$\|^#' "$CAGE/$2";printf "\n"
+		else printroutine 13 "$2";exit;fi
 	else printroutine 20
 	fi
 
@@ -668,11 +672,12 @@ printroutine() {
 }
 
 
-case "$1" in
-	start)		startroutine "$2";;
-	stop)		syncroutine "$2";stoproutine "$2";;
-	sync)		syncroutine "$2";;
-	list)		listroutine display "$2";;
-	*)		if [ "$2" ] ;then listroutine display ;fi ;printroutine 0;exit ;;
-esac
-
+if [ "$3" ] ;then printroutine 0;exit
+else	case "$1" in
+		start)	startroutine "$2";;
+		stop)	syncroutine "$2";stoproutine "$2";;
+		sync)	syncroutine "$2";;
+		list)	listroutine display "$2";;
+		*)	if [ "$2" ] ;then listroutine display ;fi ;printroutine 0;exit ;;
+	esac
+fi
