@@ -446,7 +446,7 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 
 bootpetroutine() { #without ramd, assume system boot or first time run
-	if [ ! -d "$RAMD" ] ;then mkdir -p "$RAMD";chmod -R 0700 "$PETS"
+	if [ ! -d "$RAMD" ] ;then mkdir -p "$RAMD";chmod -R 0700 "$PETS";chmod 0755 "$PETS"/bin/pets
 
 		#use symlink to add pets to path
 		if ! which pets ;then printroutine 99 "\`pets\` is not in your PATH. installing.."
