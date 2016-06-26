@@ -1,8 +1,8 @@
 #! /bin/sh
-# version 0.7f
+# version 0.7g
 #
 # debug, for development purposes only. {0|1|log}
-DEBG=0
+DEBG=1
 PETS=/etc/pets
 RAMD=/dev/shm/pets
 dbg() {	case "$DEBG" in
@@ -47,8 +47,8 @@ listroutine() { CAGE="$PETS/cage";LIST=""
 		fi
 	done
 
-	#encrypted tmpfs/ramfs mount base and loop device path. set list to none if doesnt exist
-	if [ ! -d "$RAMD" ] ;then mkdir -p "$RAMD" ;fi ;LIST="${LIST:-none!}"
+	#bootpet ensures we are installed correctly. set list to none if doesnt exist
+	bootpetroutine;LIST="${LIST:-none!}"
 
 	#if given arg to display, pass it and supplied pet to displayroutine
 	if [ "$1" = "display" ] ;then displayroutine "$1" "$2" ;exit ;fi
@@ -108,7 +108,7 @@ startroutine() { TLST="$1"
 			if [ "$NAME" ] ;then
 
 				#mount pet only if TARG is empty and if not already mounted
-				if [ "$(ls -A $TARG)" ] ;then printroutine 2
+				if [ "$(ls -A $TARG 2>/dev/null)" ] ;then printroutine 2
 				elif ! mountpoint -q $TARG ;then mountroutine
 
 					#on succesfull mount, find latest archive. create STOR if non-existant
@@ -122,7 +122,7 @@ startroutine() { TLST="$1"
 								printf "\n"
 
 								#if TARG now has contents, service MNTC/SRVC vars.
-								if [ "$(ls -A $TARG)" ] ;then advancedroutine restart;printroutine 4 ;fi
+								if [ "$(ls -A $TARG 2>/dev/null)" ] ;then advancedroutine restart;printroutine 4 ;fi
 					 		else
 
 								#error if no archive found
@@ -155,7 +155,7 @@ syncroutine() { TLST="$1"
 			if [ "$NAME" ] ;then
 
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
-				if [ "$(ls -A $TARG)" ] ;then printroutine 3 pet archive
+				if [ "$(ls -A $TARG 2>/dev/null)" ] ;then printroutine 3 pet archive
 					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR ;fi
 
 					#generate new archive
@@ -309,9 +309,11 @@ advsrvcroutine() {
 		#if set to systemd, ensure correctness of vars, then manipulate systemctl
 		else INIT="$(echo "$stok"|awk -F':' '{print $1}')"
 
-			#use case for future init system options, and to direct action
+			#use case for future sysinit options, and to direct action
 			case "$INIT" in
 				systemd) case $ACTN in
+
+						#if not started, start, check if started, report
 						Restarting) if ! systemctl --quiet is-active "$unit" ;then
 								systemctl "$1" "$unit" 2>/dev/null
 								if systemctl --quiet is-active "$unit" ;then
@@ -320,6 +322,8 @@ advsrvcroutine() {
 								fi
 							fi
 						;;
+
+						#if started, stop, check if stopped, report
 						Stopping) if systemctl --quiet is-active "$unit" ;then
 								systemctl "$1" "$unit" 2>/dev/null
 								if ! systemctl --quiet is-active "$unit" ;then
@@ -438,6 +442,47 @@ advmntcroutine() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 		else printroutine 99 "($TARG) can not find block device '$DEVC'"
 		fi
 	done
+}
+
+
+bootpetroutine() { #without ramd, assume system boot or first time run
+	if [ ! -d "$RAMD" ] ;then mkdir -p "$RAMD";chmod -R 0700 "$PETS"
+
+		#use symlink to add pets to path
+		if ! which pets ;then printroutine 99 "\`pets\` is not in your PATH. installing.."
+
+			#prefered pathing
+			if [ -d "/usr/local/sbin" ] ;then printroutine 99 "$({ ln -sfv $PETS/bin/pets /usr/local/sbin/pets; } 2>&1)"
+			elif [ -d "/usr/sbin" ] ;then printroutine 99 "$({ ln -sfv $PETS/bin/pets /usr/sbin/pets; } 2>&1)"
+			else return 1;exit
+			fi
+			. /etc/profile;printf "\n"
+		fi
+
+		#force systemd installation if found
+		if [ -d /etc/systemd/system ] ;then
+			if [ ! -r /etc/systemd/system/pets.service ] ;then
+				printroutine 99 "! installing to systemd - copying file.."
+				printroutine 99 "$({ cp -av $PETS/doc/pets.unit /etc/systemd/system/pets.service; } 2>&1)"
+				printroutine 99 "$({ systemctl enable pets; } 2>&1)"
+				printf "\n"
+			fi
+		elif [ -d /etc/init.d ] ;then
+			if [ ! -r /etc/init.d/pets ] ;then
+				printroutine 99 "! installing to initserv - copying file.."
+				printroutine 99 "$({ cp -av "$PETS"/doc/pets.init /etc/init.d/pets; } 2>&1)"
+				printf "\n"
+			fi
+		fi
+
+		#install for bash. *improve me*
+		if [ "$SHELL" = "/bin/bash" -a ! -r "/etc/bash_completion.d/pets" ] ;then
+			printroutine 99 "! bash detected - installing completion.."
+			printroutine 99 "$({ cp -av /etc/pets/doc/pets.bash /etc/bash_completion.d/pets; } 2>&1)"
+			printroutine 99 "active with: \`source /etc/bash_completion.d/pets\` ,or reboot.."
+			printf "\n"
+		fi
+	fi
 }
 
 
@@ -640,7 +685,7 @@ killingroutine() {
 
 
 #rotate while given pid is active pass secs var for timer
-pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2> /dev/null ;do rotating "$2";sleep 1;done ;}
+pidroutine() { SECS="$(date +%s)";while kill -0 "$1" 2>/dev/null ;do rotating "$2";sleep 1;done ;}
 
 
 #give spinning timer wheel to functions
@@ -692,13 +737,12 @@ printroutine() {
 	esac
 }
 
-
 if [ "$3" ] ;then printroutine 0;exit
 else	case "$1" in
 		start)	startroutine "$2";;
 		stop)	syncroutine "$2";stoproutine "$2";;
 		sync)	syncroutine "$2";;
 		list)	listroutine display "$2";;
-		*)	if [ "$2" ] ;then listroutine display ;fi ;printroutine 0;exit ;;
+		*)	if [ "$2" ] ;then listroutine display ;fi ;bootpetroutine;printroutine 0;exit ;;
 	esac
 fi
