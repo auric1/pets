@@ -2,7 +2,7 @@
 # version 0.7g
 #
 # debug, for development purposes only. {0|1|log}
-DEBG=1
+DEBG=0
 PETS=/etc/pets
 RAMD=/dev/shm/pets
 dbg() {	case "$DEBG" in
@@ -156,18 +156,19 @@ syncroutine() { TLST="$1"
 
 				#only if TARG contains files. get date and ensure KEEP/STOR are satisfied
 				if [ "$(ls -A $TARG 2>/dev/null)" ] ;then printroutine 3 pet archive
-					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR ;fi
+					if [ ! -d $STOR ] ;then printroutine 5
+					else
+						#generate new archive
+						DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
+						ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
+						TARO="--ignore-failed-read --absolute-names --lzop"
+						tar $TARO $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
+						ARCH="";printf "\n"
 
-					#generate new archive
-					DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
-					ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
-					TARO="--ignore-failed-read --absolute-names --lzop"
-					tar $TARO $TOPT -cf "$ARCH" $TARG/ >/dev/null 2>&1 & pidroutine "$!" synchronizing
-					ARCH="";printf "\n"
-
-					#remove all pets beyond desired KEEP by date
-					FNDO="-maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo""
-					find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
+						#remove all pets beyond desired KEEP by date
+						FNDO="-maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo""
+						find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
+					fi
 
 				#error when no files found in TARG
 				else printroutine 9 pet sync
@@ -714,6 +715,7 @@ printroutine() {
 	        2)	echo "$NO" '('$TARG') this path already has a pets things in it'${RD}${RD} ;;
 	        3)	echo "$OK" '('$TARG') syncing files: '"$2"' -> '"$3"${GR}${GR} ;;
 	        4)	echo "$OK" '('$TARG') completed!'${GR}${GR} ;;
+		5)	echo "$NO" '('$TARG') sync failed. STOR('$STOR') dir not found..'${RD}${RD} ;;
 	        6)	echo "$OK" '('$TARG') mounting ('"$2"') as: '"$TYPE"'. going to work'${GR}${GR} ;;
 	        7)	echo "$OK" '('$TARG') removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
 	        8)	echo "$OK" '('$TARG') released loop device:' "${LOOP}"${GR}${GR} ;;
