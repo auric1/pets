@@ -1,3 +1,12 @@
 #TODO
 
+-change SRVC to auto detect init system, defaulting to systemd
 -seperate subroutine for command -v checks
+-develop systemd unit
+
+#CONSIDERATIONS
+-develop readme
+-any advantage to .pet file placemarker??
+-rearrange functions so that during pets stop only, services are stopped before* sync
+-'clean' function to remove pet archives
+
