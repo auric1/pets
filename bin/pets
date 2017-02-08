@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7h
+# version 0.7i
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -115,20 +115,22 @@ startr_() { TLST="$1"
 					if mountpoint -q $TARG ;then
 						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printr_ 9 archive extract
 						else
-							#establish latest archive file of pet. perform extraction
-							ARCH=$(find $STOR -maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo" -printf '%T@ %p\n'|sort -k1 -nr|head -n1|awk '{print $2}') >/dev/null 2>&1
+							#establish latest archive file of pet. perform extraction. ARCS suggests tar -x for error_
+							ARCS="$(find "$STOR" -maxdepth 1 -type f -name "$NAME".PETS.*.tar.lzo -printf '%T@ %p\n')"
+							ARCH="$(echo "$ARCS"|sort -k1 -nr|head -n1|awk '{print $2}')"
 							if [ -r "$ARCH" ] ;then	printr_ 3 archive pet
-								tar --absolute-names --lzop -xf "$ARCH" -C $TARG >/dev/null 2>&1 & pidr_ "$!" synchronizing
-								printf "\n"
 
-								#if TARG now has contents, service MNTC/SRVC vars.
-								if [ "$(ls -A $TARG 2>/dev/null)" ] ;then advncr_ restart;printr_ 4 ;fi
+								#redirect stderr to stdout and push all to error file
+								tar --absolute-names --lzop -xf "$ARCH" -C $TARG >"$RAMD/error" 2>&1 &\
+									pidr_ "$!" synchronizing;printf "\n"
+
+								#if tar/lzop complete quietly, service MNTC/SRVC vars.
+								if ! terror_ extract ;then advncr_ restart;printr_ 4 ;fi
 					 		else
-
-								#error if no archive found
+								#error if not archive unreadable
 								printr_ 9 archive extract
 							fi
-							ARCH=""
+							ARCS=""ARCH=""
 						fi
 					fi
 
@@ -158,33 +160,23 @@ syncr_() { TLST="$1"
 				if [ "$(ls -A $TARG 2>/dev/null)" ] ;then printr_ 3 pet archive
 					if [ ! -d $STOR ] ;then printr_ 5
 					else
-
 						#generate new archive parameters
 						DATE="$(date +"%Hh%Mm%Ss-%m.%d.%Y")"
 						ARCH="$STOR/$NAME.PETS.${DATE}.tar.lzo"
 						TARO="--ignore-failed-read --absolute-names --lzop"
 
 						#redirect stderr to stdout and push all to error file
-						#(exit status of tar cannot be used while pidr_ always returns true)
-						tar $TARO $TOPT -cf "$ARCH" $TARG/ >"$RAMD/error" 2>&1 & pidr_ "$!" synchronizing;printf "\n"
+						tar $TARO $TOPT -cf "$ARCH" $TARG/ >"$RAMD/error" 2>&1 &\
+							pidr_ "$!" synchronizing;printf "\n"
 
 						#any messages from tar/lzop will be considered errors.
-						if [ "$(cat $RAMD/error|wc -l)" -ge 1 ] ;then
-
-							#prefix STOR to lines of error file to sanitize printr_ 98 (sed -i -e ?)
-							awk -v prefix="($STOR) " '{print prefix $0}' "$RAMD/error" > "$RAMD/error.fix" && \
-								mv "$RAMD/error.fix" "$RAMD/error"
-
-							#do error msgs and push to dmesg (do we want to add MAIL var/functions, etc ?)
-							printr_ 98 "$(cat $RAMD/error)"|tee /dev/kmsg
-							rm -f "$RAMD/error" "$ARCH"
-							printr_ 23 "$(ls -A $STOR|grep $NAME.PETS.|wc -l)"|tee /dev/kmsg
+						if terror_ create ;then rm -f "$ARCH"
 
 						#remove all pets beyond desired KEEP by date
 						else FNDO="-maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo""
-							find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
+							find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|\
+							tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
 						fi
-
 						ARCH=""
 					fi
 
@@ -201,7 +193,6 @@ syncr_() { TLST="$1"
 	else printr_ 20
 	fi
 }
-
 
 stopr_() { TLST="$1"
 
@@ -236,7 +227,8 @@ mountr_() { printr_ 6 "$NAME";mkdir -p $TARG
 			chmod 700 "$PTAH"
 
 			#creation of loop file
-			dd if=/dev/urandom of="$PTAH"/"$NAME" bs=1M count=$SIZE >/dev/null 2>&1 & pidr_ "$!" randomizing
+			dd if=/dev/urandom of="$PTAH"/"$NAME" bs=1M count=$SIZE >/dev/null 2>&1 &\
+				pidr_ "$!" randomizing
 
 			#get next available loop device and use it for loop file
 			LOOP=$(losetup -f);losetup "$LOOP" "$PTAH/$NAME"
@@ -506,17 +498,17 @@ bootpetr_() { #without ramd, assume system boot or first time run
 
 
 loadpetr_() { CONF="$PETS/cage/$1"
-		if fixpetr_ pre "$CONF" ;then
+	if fixpetr_ pre "$CONF" ;then
 
-			#set defaults of pet file vars
-			TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
-			KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="xfs";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1"
+		#set defaults of pet file vars
+		TARG="";TYPE="tmpfs";SIZE="512";COWN="root:root";CMOD="0644";MOPT="";STOR="$PETS/store"
+		KEEP="1";TOPT="";ENCR="no";PARI="no";FSFS="xfs";FOPT="";COPT="";MNTC="";SRVC="";NAME="$1"
 
-			#include pet file, check vars
-			fixpetr_ post "$CONF"
+		#include pet file, check vars
+		fixpetr_ post "$CONF"
 
-		#error if no pet found
-		else printr_ 13 "$1"
+	#error if no pet found
+	else printr_ 13 "$1"
 	fi
 }
 
@@ -685,6 +677,26 @@ fixpetr_() {
 }
 
 
+terror_() { #return true with any output from tar
+	if [ -s "$RAMD/error" ] ;then
+		case "$1" in
+			extract) PRFX="$TARG";PRNT="23 $(basename $ARCH)" ;;
+			create) PRFX="$STOR";PRNT="24 $(ls -A $STOR|grep $NAME.PETS.|wc -l)" ;;
+		esac
+
+		#PRFX to lines of error file to sanitize printr_ 98 (sed -i -e ?)
+		awk -v prefix="($PRFX) " '{print prefix $0}' "$RAMD/error" > "$RAMD/error.fix" && \
+			mv "$RAMD/error.fix" "$RAMD/error"
+
+		#do error msgs and push to dmesg. clean up
+		printr_ 98 "$(cat $RAMD/error)"|tee /dev/kmsg;printr_ $PRNT|tee /dev/kmsg
+		rm -f "$RAMD/error";PRFX="";PRNT=""
+
+		return 0
+	else return 1 ;fi
+}
+
+
 #true if arg matches ^/dev/mapper/*-*
 chklvr_() { if expr "$1" : '/dev/mapper/.*-.*' >/dev/null 2>&1 ;then return 0 ;else return 1 ;fi ;}
 
@@ -751,12 +763,14 @@ printr_() {
 		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
 		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5''${FS}''$6' used with '$7' free of '$8')'${GR}${GR} ;;
 		22)	echo "$NO" "$2"' failed. '"$3"' unit ('"$4"') was not '"$5"${RD}${RD} ;;
-		23)	echo "$NO" '('$TARG') errors detected - ('$2') archive(s) will not be cycled'${RD}${RD} ;;
+		23)	echo "$NO" '('$TARG') unsuccessfull extraction('$2'). ignoring MNTC/SRVC configuration'${RD}${RD} ;;
+		24)	echo "$NO" '('$TARG') unsuccessfull compression. ('$2') archive(s) will not be cycled'${RD}${RD} ;;
 		98)	echo "$NO" "$(echo "$2"|tr '\n' ' ')" ;;
 		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
 		*)	echo "$HM" "$@" ;;
 	esac
 }
+
 
 if [ "$3" ] ;then printr_ 0;exit
 else	case "$1" in

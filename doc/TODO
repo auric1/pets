@@ -1,12 +1,17 @@
 #TODO
 
+-ensure success of tar extraction (develop error file function)
+-change MNTC token delimiter from : to @ to allow more types of mounts
+-change MNTC to multi-line MNT#{###} to clarify complex partition schema
 -change SRVC to auto detect init system, defaulting to systemd
--seperate subroutine for command -v checks
+-develop seperate subroutine for command -v checks
+-develop printing of more errors. less routing to /dev/null
+-develop return statuses of more functions for sanity
 -develop systemd unit
+-develop readme
 
 #CONSIDERATIONS
--develop readme
 -any advantage to .pet file placemarker??
--rearrange functions so that during pets stop only, services are stopped before* sync
+-rearrange functions so that during pets stop only, services are stopped before* sync ??
 -'clean' function to remove pet archives
 
