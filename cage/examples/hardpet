@@ -42,28 +42,49 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 ######### ADVANCED #
 ####################
 #
-# supplementary mounts. mounted left to right, dismounted right to left. DEVICE:{PATH/-}:{KEYFILE/-}
+# supplementary mounts. (MP##) {DEVICE|UUID}@{PATH|-}@{KEYFILE|-}
+#
 #	UUIDs can be used in the DEVICE token (avoid lv targets - possibility of dupicate IDs)
 #	note: you MUST use the 'TOPT' var to exclude each of these entries
-#	the only exception being if an entry is being mounted WITHIN another entry!
-#	e.g. only 'test1' is excluded in this pet's TOPT
-#	..you DO NOT want their contents in the pet's archive (tarball)
+#	      exceptions being if an entry is being mounted WITHIN another entry
+#             e.g. only MP11's 'test1' is excluded in this pet's TOPT (not MP12)
+#	      *OR*
+#	      the path is NOT within the pets TARG to begin with
+#	      e.g. MP99's /arbitrary/path is outside of TARG's /home/mail
+#
+# (v0.7j) * MNTC deprecated. multiple 'MP##' variable capability implemented
+#	with MP## vars, the '##' determines order, regardless of placement.
+#	i.e. these vars can be scattered anywhere in the file, in any order,
+#	but will be sorted/processed lowest to highest. MP00 -> MP99(max)
+#	note: the token delimiter has also been updated from ':' to '@',
+#	      to support more `mount` options in the future.
 #
 # (v0.6a) * now supporting luks and lvm devices via 2 changes
-#    1) the second token can now be "-" to skip the mount/umount of device
+#    1) the second token can now be "-" to skip the mount/umount of device.
 #	have a luks device with underlying lvm? of course no mount of luks necessary,
-#	then use two entries like (luks then lv) so:	dev:-:key dev:path
-#	note: it is important that the luks entry is LEFTWARDS of the lvm entries in 'MNTC',
-#	but they are not required to be adjacent.
-#    2) the third token is not required, but can be a luks keyfile or "-"
+#	then use two entries like (luks then lv) so:	MP00="dev@-@key", MP01="dev@path"
+#	note: it is important that the luks entry is a LOWER 'MP##' than the lvm entries,
+#	      but they are not required to be adjacent, or sequential.
+#    2) the third token is not required, but can be a luks keyfile or "-".
 #	using "-" here will do passphrase prompt for manual key entry
-#	note: crypto devices will use name of source dev e.g. /dev/sdb -> 'sdb'
+#	note: crypto devices will use the name of the source dev
+#	      e.g. /dev/sdb -> 'sdb'
 #
-#MNTC="f4d20e76-c90d-42ec-9909-5a77b35851e3:/home/mail/dump /dev/md0:-:/root/.keystore/md0_key /dev/mapper/md0-lv1:/home/mail/test1 /dev/mapper/md0-lv2:/home/mail/test1/test2"
+MP00="f4d20e76-c90d-42ec-9909-5a77b35851e3@/home/mail/dump"
+MP10="/dev/md0@-@/root/.keystore/md0_key"
+MP11="/dev/mapper/md0-lv1@/home/mail/test1"
+MP12="/dev/mapper/md0-lv2@/home/mail/test1/test2"
+MP99="5bc87f37-c60c-452e-a270-ae4c96859332@/arbitrary/path"
 #
-# default /etc/init.d/ITEM {restart|stop}, or prefix 'systemd:' for /etc/systemd/system/ITEM .restarted left to right, stopped right to left
-#SRVC="systemd:maildaemon otherservice"
 #
+#
+# supplementary services. (SRVC) {systemd:}SERVICE
+#
+#       default /etc/init.d/SERVICE {restart|stop}, or prefix 'systemd:' for /etc/systemd/system/SERVICE
+#       restarted left to right, stopped right to left. SRVC is always processed *after* MP## entries, 
+#	regardless of it's placement in the file.
+#
+SRVC="systemd:maildaemon otherservice"
 ####################
 ########### ENDCFG #
 ####################

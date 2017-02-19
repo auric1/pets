@@ -1,5 +1,5 @@
 #! /bin/sh
-# version 0.7i
+# version 0.7j
 #
 # debug, for development purposes only. {0|1|log}
 DEBG=0
@@ -30,8 +30,8 @@ listr_() { CAGE="$PETS/cage";LIST=""
 	for file in $TLST ;do ITEM="$(basename $file)"
 		if [ -z "$(echo "$ITEM"|tr -d "[:alnum:]")" ] ;then
 
-			#ensure all pet file vars are quoted
-			fixpetr_ quotes "$file"
+			#ensure syntax of all pet file vars
+			fixpetr_ syntax "$file"
 
 			#and file exists and USED equals yes
 			if [ -f "$file" ] && grep -q ^USED=\"yes\" "$file" ;then
@@ -68,7 +68,7 @@ displayr_() {
 
 	#cycle pets list, if mounted show stats
 	if [ "$LIST" != "none!" ] ;then
-		for disp in $LIST ;do loadpetr_ "$disp"
+		for disp in $LIST ;do loadpetr_ "$disp" "disp"
 			if mountpoint -q $TARG ;then STAT=""
 
 				#encrypted or tmpfs, grab stats from df. use du for ramfs
@@ -93,7 +93,7 @@ displayr_() {
 				fi
 
 			#if pet isnt mounted
-			else printr_ 10 "$disp"
+			else printr_ 10 "$disp" "mounted!"
 			fi
 		done
 	fi
@@ -108,34 +108,30 @@ startr_() { TLST="$1"
 			if [ "$NAME" ] ;then
 
 				#mount pet only if TARG is empty and if not already mounted
-				if [ "$(ls -A $TARG 2>/dev/null)" ] ;then printr_ 2
-				elif ! mountpoint -q $TARG ;then mountr_
+				if mountpoint -q $TARG ;then printr_ 16
+				elif [ "$(ls -A $TARG 2>/dev/null)" ] ;then printr_ 2
+				elif mountr_ ;then
 
 					#on succesfull mount, find latest archive. create STOR if non-existant
-					if mountpoint -q $TARG ;then
-						if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printr_ 9 archive extract
-						else
-							#establish latest archive file of pet. perform extraction. ARCS suggests tar -x for error_
-							ARCS="$(find "$STOR" -maxdepth 1 -type f -name "$NAME".PETS.*.tar.lzo -printf '%T@ %p\n')"
-							ARCH="$(echo "$ARCS"|sort -k1 -nr|head -n1|awk '{print $2}')"
-							if [ -r "$ARCH" ] ;then	printr_ 3 archive pet
+					if [ ! -d $STOR ] ;then mkdir -p $STOR;chmod 0700 $STOR;printr_ 9 archive extract
+					else
+						#establish latest archive file of pet. perform extraction.
+						ARCS="$(find "$STOR" -maxdepth 1 -type f -name "$NAME".PETS.*.tar.lzo -printf '%T@ %p\n')"
+						ARCH="$(echo "$ARCS"|sort -k1 -nr|head -n1|awk '{print $2}')"
+						if [ -r "$ARCH" ] ;then	printr_ 3 archive pet
 
-								#redirect stderr to stdout and push all to error file
-								tar --absolute-names --lzop -xf "$ARCH" -C $TARG >"$RAMD/error" 2>&1 &\
-									pidr_ "$!" synchronizing;printf "\n"
+							#redirect stderr to stdout and push all to error file
+							tar --absolute-names --lzop -xf "$ARCH" -C $TARG >"$RAMD/error" 2>&1 &\
+								pidr_ "$!" synchronizing;printf "\n"
 
-								#if tar/lzop complete quietly, service MNTC/SRVC vars.
-								if ! terror_ extract ;then advncr_ restart;printr_ 4 ;fi
-					 		else
-								#error if not archive unreadable
-								printr_ 9 archive extract
-							fi
-							ARCS=""ARCH=""
+							#if tar/lzop complete quietly, service MP##/SRVC vars.
+							if ! terror_ extract ;then advncr_ restart;printr_ 4 ;fi
+				 		else
+							#error if archive unreadable
+							printr_ 9 archive extract
 						fi
+						ARCS=""ARCH=""
 					fi
-
-				#error when start requested but TARG is already mounted
-				else printr_ 16
 				fi
 			fi
 		done
@@ -144,8 +140,7 @@ startr_() { TLST="$1"
 	elif [ "$1" ] ;then printr_ 13 "$1"
 
 	#when no pets are found enabled
-	else printr_ 20
-	fi
+	else printr_ 20 ;fi
 }
 
 
@@ -175,7 +170,7 @@ syncr_() { TLST="$1"
 						#remove all pets beyond desired KEEP by date
 						else FNDO="-maxdepth 1 -type f -name "$NAME.PETS.*.tar.lzo""
 							find $STOR $FNDO -printf '%T@ %p\n'|sort -k1 -nr|\
-							tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
+								tail -n +$((KEEP+1))|xargs rm >/dev/null 2>&1
 						fi
 						ARCH=""
 					fi
@@ -254,7 +249,8 @@ mountr_() { printr_ 6 "$NAME";mkdir -p $TARG
 	fi
 
 	#if mount appears successful, modify target permissions
-	if mountpoint -q $TARG ;then chown $COWN $TARG;chmod $CMOD $TARG ;fi
+	if mountpoint -q $TARG ;then chown $COWN $TARG;chmod $CMOD $TARG;return 0
+	else return 1 ;fi
 }
 
 
@@ -290,7 +286,6 @@ unmountr_() {
 
 
 advncr_() {
-
 	#function controlling order of advanced procedures
 	case "$1" in
 
@@ -360,9 +355,9 @@ advmntcr_() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 	for mnts in $ARGS ;do
 
 		#develop vars from MNTC args
-		DEVC="$(echo "$mnts"|awk -F':' '{print $1}')"
-		DIRC="$(echo "$mnts"|awk -F':' '{print $2}')"
-		KEYC="$(echo "$mnts"|awk -F':' '{print $3}')"
+		DEVC="$(echo "$mnts"|awk -F'@' '{print $1}')"
+		DIRC="$(echo "$mnts"|awk -F'@' '{print $2}')"
+		KEYC="$(echo "$mnts"|awk -F'@' '{print $3}')"
 
 		#detect UUID entry and convert DEVC var
 		if echo "$DEVC"|grep -Eq '[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}' ;then UUID=""
@@ -403,7 +398,7 @@ advmntcr_() { ACTN="mounting";ARGS="$(echo "$@"|cut -f 2- -d " ")"
 
 						umount)
 							#generate list of potential lv matching /dev/mapper/X-* from args
-							for lv in $(echo "${ARGS%% "$DEVC"*}") ;do LARG="$(echo $lv|cut -f 1 -d ":")"
+							for lv in $(echo "${ARGS%% "$DEVC"*}") ;do LARG="$(echo $lv|cut -f 1 -d "@")"
 								if chklvr_ "$LARG" ;then
 									LARG="$(basename $LARG|cut -f 1 -d "-")"
 									LVMS="$LVMS $LARG"
@@ -507,31 +502,38 @@ loadpetr_() { CONF="$PETS/cage/$1"
 		#include pet file, check vars
 		fixpetr_ post "$CONF"
 
-	#error if no pet found
-	else printr_ 13 "$1"
-	fi
+		#conjoin MP## vars
+		for mp in $(cat "$CONF"|grep -E '^MP[[:digit:]]{2}'|sort|cut -d= -f2|tr -d '"') ;do
+			MNTC="$(echo $MNTC) $mp"
+		done
+
+	#error if no valid pet found. give TARG random value to ensure failure
+	else if [ "$2" != "disp" ] ;then printr_ 10 "$1" "configured!";fi ;TARG="/-" ;fi
 }
 
 fixpetr_() {
 	case "$1" in
-		quotes)	#ensure all pet file vars are quoted
+		syntax)	# rewrite supplied pet file. keep specific lines only
+			NEWF="$(cat $2|egrep -E '^[A-Z]{4}=|^MP[[:digit:]]{2}=|^$|^#'|uniq)"
+			echo "$NEWF" > "$2";NEWF=""
 
-			#save in hold buff, remove everything before #, swap with hold buff, remove comment
-			EXP1="h;s/[^#]*//1;x;s/#.*//"
-			#remove all single and double quotes
-			EXP2="s/['\"]//g"
-			#insert " after 5th postion every line
-			EXP3="s/./&\"/5"
-			#insert " at end of every line
-			EXP4="s/$/\"/g"
-			#reduce any amount of " to a single occurance
-			EXP5="s/([\"])+/\"/g"
-			#remove leading "
-			EXP6="s/^\"//"
-			#fix enabled, empty vars with missing quote eg VAR="
-			EXP7="s/\=\"$/\=\"\"/g"
-			#append newline and hold buff, remove last newline
-			EXP8="G;s/(.*)\n/\1/"
+			#ensure all pet file vars are quoted
+				#save in hold buff, remove everything before #, swap with hold buff, remove comment
+				EXP1="h;s/[^#]*//1;x;s/#.*//"
+				#remove all single and double quotes
+				EXP2="s/['\"]//g"
+				#insert " after 5th postion every line
+				EXP3="s/./&\"/5"
+				#insert " at end of every line
+				EXP4="s/$/\"/g"
+				#reduce any amount of " to a single occurance
+				EXP5="s/([\"])+/\"/g"
+				#remove leading "
+				EXP6="s/^\"//"
+				#fix enabled, empty vars with missing quote eg VAR="
+				EXP7="s/\=\"$/\=\"\"/g"
+				#append newline and hold buff, remove last newline
+				EXP8="G;s/(.*)\n/\1/"
 
 			#perform operation
 			sed -i -r ''"$EXP1"';'"$EXP2"';'"$EXP3"';'"$EXP4"';'"$EXP5"';'"$EXP6"';'"$EXP7"';'"$EXP8"'' "$2"
@@ -541,8 +543,8 @@ fixpetr_() {
 
 			#reset failed state var. start read on pet file vars
 			PFLD="";BASE="$(basename $CONF)"
-			while IFS="=" read pvar valu ;do
-				if echo "$pvar"|grep -Eq '^[[:alpha:]]{4}$' ;then valu="$(echo $valu|sed 's/\"//g')"
+			while IFS="=" read pvar valu ;do valu="$(echo $valu|sed 's/\"//g')"
+				if echo "$pvar"|grep -Eq '^[[:alpha:]]{4}$' ;then
 					case "$pvar" in
 
 						TARG) #no null
@@ -577,20 +579,48 @@ fixpetr_() {
 							done
 						;;
 
-						MNTC) # (/dev/path|UUID):(-|/path)(:-|:/path) ,repeated, match all. iterate for token-specific output
+						MNTC)	printr_ 98 "($BASE) $pvar configuration is now deprecated! testing your syntax before conversion"
+							# (-|/dev/path|UUID)(:|@)(-|/path)((:|@)-|(:|@)/path) ,repeated, match all. iterate for token-specific output
 							for vtok in $valu ;do
-								#match /dev/path|UUID
-								MTK1="^(/dev/[0-9a-zA-Z_./\-]+|[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12})"
+								#match -|/dev/path|UUID
+								MTK1="^(-|/dev/[0-9a-zA-Z_./\-]+|[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12})"
 								#match : and -|/path
-								MTK2=":(-|\/[0-9a-zA-Z_./]+)"
+								MTK2="(:|@)(-|\/[0-9a-zA-Z_./]+)"
 								#match optional :-|/path
-								MTK3="(\:-|\:[0-9a-zA-Z_./]+)?$"
+								MTK3="((:|@)-|(:|@)[0-9a-zA-Z_./]+)?$"
 								if ! echo "$vtok"|grep -Eq "^${MTK1}${MTK2}${MTK3}" ;then PFLD="1"
-									printr_ 98 "($BASE) $pvar invalid token: $vtok"
+									printr_ 98 "($BASE) $pvar invalid token: $vtok."
 								fi
 							done
+
+							# no invalid tokens, proceed to conversion
+							if [ "$PFLD" != 1 ] ;then mp="00"
+								# comment out MNTC, remove lines starting with MP##=
+								sed -i 's/^MNTC/#MNTC/;/^MP[[:digit:]][[:digit:]]=/ d' "$CONF"
+
+								# push new variable strings to conf. swap "-" delimiter for "@"
+								for vadd in $valu ;do echo "MP$mp=\"$(echo $vadd|tr : @)\"" >> "$CONF"
+									mp="$(printf %02d $((mp+1)))"
+								done
+
+								# informative outputs
+								printr_ 97 "($BASE) conversion completed. ensure these are correct!:"
+								printf "\n";grep -v '^$\|^#' "$CONF"|grep '^MP[[:digit:]][[:digit:]]=';printf "\n"
+							else printr_ 98 "($BASE) $pvar conversion has NOT completed..."
+							fi
 						;;
 					esac
+				elif	# (-|/dev/path|UUID)@(-|/path)(@-|@/path) ,repeated, match all. iterate for token-specific output
+					echo "$pvar"|grep -Eq '^MP[[:digit:]]{2}$' ;then
+					#match -|/dev/path|UUID
+					MTK1="^(-|/dev/[0-9a-zA-Z_./\-]+|[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12})"
+					#match : and -|/path
+					MTK2="@(-|\/[0-9a-zA-Z_./]+)"
+					#match optional :-|/path
+					MTK3="(@-|@[0-9a-zA-Z_./]+)?$"
+					if ! echo "$valu"|grep -Eq "^${MTK1}${MTK2}${MTK3}" ;then PFLD="1"
+						printr_ 98 "($BASE) $pvar invalid token: $valu."
+					fi
 				fi
 			done < "$2"
 
@@ -740,34 +770,35 @@ printr_() {
 
 	#output set.
         case "$1" in
-	        0)	echo "$HM" 'u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}' ;;
-	        1)	echo "$OK" 'Persistent Encrytable Tmpfs Server:' P${GR}E${GR}T${GR}S${GR} ;;
-	        2)	echo "$NO" '('$TARG') this path already has a pets things in it'${RD}${RD} ;;
-	        3)	echo "$OK" '('$TARG') syncing files: '"$2"' -> '"$3"${GR}${GR} ;;
-	        4)	echo "$OK" '('$TARG') completed!'${GR}${GR} ;;
-		5)	echo "$NO" '('$TARG') sync failed. STOR('$STOR') not found'${RD}${RD} ;;
-	        6)	echo "$OK" '('$TARG') mounting ('"$2"') as: '"$TYPE"'. going to work'${GR}${GR} ;;
-	        7)	echo "$OK" '('$TARG') removed cryptsetup device:' "${NAME}"${GR}${GR} ;;
-	        8)	echo "$OK" '('$TARG') released loop device:' "${LOOP}"${GR}${GR} ;;
-	        9)	echo "$NO" '('$TARG') no '"$2"'s in there to '"$3"'??'${RD}${RD} ;;
-		10)	echo "$NO" '('"$2"') '${HR}' not mounted!' ${RD}${RD} ;;
-		11)	echo "$HM" '('$TARG') skip '"$2"' device: '"$3"'' ;;
-		12)	echo "$OK" "$2"' '"$(echo "$3"|cut -d "." -f 1)"' (via systemctl): '"$3"'.' ;;
-	        13)	echo "$NO" 'no valid pets by the name of:' "${2}"${RD}${RD} ;;
-	        14)	echo "$NO" '('"$2"') skipping while BOOT does not equal yes.'"$3"'..' ;;
-		15)	echo "$NO" '('"$2"') i can not find this binary'${RD}${RD} ;;
-		16)	echo "$NO" '('$TARG') looks like this pet is already mounted'${RD}${RD} ;;
-		17)	echo "$OK" '('$TARG') using badblocks to create additional parity'${GR}${GR} ;;
-		18)	echo "$OK" '('$TARG') '"$2" "$3" "$4" "$5"${GR}${GR} ;;
-		19)	echo "$HM" '('"$2"') issuing a kill on pid ('"$3"') '${RD}${RD} ;;
-		20)     echo "$OK" 'pets enabled: '"${LIST}"${GR}${GR} ;;
-		21)     echo "$OK" '('"$2"') '${HG}' '$3' @ '$4' '${HG}' ('$5''${FS}''$6' used with '$7' free of '$8')'${GR}${GR} ;;
-		22)	echo "$NO" "$2"' failed. '"$3"' unit ('"$4"') was not '"$5"${RD}${RD} ;;
-		23)	echo "$NO" '('$TARG') unsuccessfull extraction('$2'). ignoring MNTC/SRVC configuration'${RD}${RD} ;;
-		24)	echo "$NO" '('$TARG') unsuccessfull compression. ('$2') archive(s) will not be cycled'${RD}${RD} ;;
-		98)	echo "$NO" "$(echo "$2"|tr '\n' ' ')" ;;
-		99)	echo "$HM" "$(echo "$2"|tr '\n' ' ')" ;;
-		*)	echo "$HM" "$@" ;;
+	        0)	echo "$HM u wot m8 ?? try: pets {list <pet>|start <pet>|stop <pet>|sync <pet>}" ;;
+	        1)	echo "$OK Persistent Encrytable TMPFS Server: P${GR}E${GR}T${GR}S${GR}" ;;
+	        2)	echo "$NO ($TARG) this path already has a pets things in it${RD}${RD}" ;;
+	        3)	echo "$OK ($TARG) syncing files: $2 -> ${3}${GR}${GR}" ;;
+	        4)	echo "$OK ($TARG) completed!${GR}${GR}" ;;
+		5)	echo "$NO ($TARG) sync failed. STOR($STOR) not found${RD}${RD}" ;;
+	        6)	echo "$OK ($TARG) mounting ($2) as: '${TYPE}' going to work${GR}${GR}" ;;
+	        7)	echo "$OK ($TARG) removed cryptsetup device: ${NAME}${GR}${GR}" ;;
+	        8)	echo "$OK ($TARG) released loop device: ${LOOP}${GR}${GR}" ;;
+	        9)	echo "$NO ($TARG) no ${2}s in there to $3??${RD}${RD}" ;;
+		10)	echo "$NO ($2) $HR not ${3}${RD}${RD}" ;;
+		11)	echo "$HM ($TARG) skip $2 device: $3" ;;
+		12)	echo "$OK $2 $(echo $3|cut -d. -f 1) (via systemctl): $3." ;;
+	        13)	echo "$NO no valid pets by the name of: ${2}${RD}${RD}" ;;
+	        14)	echo "$NO ($2) skipping while BOOT does not equal yes. $3"  ;;
+		15)	echo "$NO ($2) i can not find this binary${RD}${RD}" ;;
+		16)	echo "$OK ($TARG) this pet is already mounted!${GR}${GR}" ;;
+		17)	echo "$OK ($TARG) using badblocks to create additional parity${GR}${GR}" ;;
+		18)	echo "$OK ($TARG) $2 $3 $4 ${5}${GR}${GR}" ;;
+		19)	echo "$HM ($2) issuing a kill on pid ($3) ${RD}${RD}" ;;
+		20)     echo "$OK pets enabled: ${LIST}${GR}${GR}" ;;
+		21)     echo "$OK ($2) $HG $3 @ $4 $HG (${5}${FS}${6} used with $7 free of $8)${GR}${GR}" ;;
+		22)	echo "$NO $2 failed. $3 unit ($4) was not ${5}${RD}${RD}" ;;
+		23)	echo "$NO ($TARG) unsuccessfull extraction($2). ignoring MNTC/SRVC configuration${RD}${RD}" ;;
+		24)	echo "$NO ($TARG) unsuccessfull compression. ($2) archive(s) will not be cycled${RD}${RD}" ;;
+		97)     echo "$OK $(echo $2|tr '\n' ' ')" ;;
+		98)	echo "$NO $(echo $2|tr '\n' ' ')" ;;
+		99)	echo "$HM $(echo $2|tr '\n' ' ')" ;;
+		*)	echo "$HM $@" ;;
 	esac
 }
 

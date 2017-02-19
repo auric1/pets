@@ -1,6 +1,5 @@
 #TODO
 
--ensure success of tar extraction (develop error file function)
 -change MNTC token delimiter from : to @ to allow more types of mounts
 -change MNTC to multi-line MNT#{###} to clarify complex partition schema
 -change SRVC to auto detect init system, defaulting to systemd
