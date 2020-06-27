@@ -23,7 +23,7 @@ CMOD="0700"
 STOR="/root/crypto/petstore"
 # how many archives to retain? default = 1
 KEEP="10"
-# tar options.add some excludes that you might want,etc  !!--lzop is DEFAULT!!
+# tar options. add some excludes that you might want,etc  !!--lzop is DEFAULT!!
 TOPT="--exclude=/home/mail/dump/* --exclude=/home/mail/test1/* --exclude=/home/mail/lost+found"
 ####################
 ########## ENCRYPT #
@@ -42,7 +42,7 @@ COPT="-o 123 -s 512 -c twofish-xts-plain64"
 ######### ADVANCED #
 ####################
 #
-# supplementary mounts. (MP##) {DEVICE|UUID}@{PATH|-}@{KEYFILE|-}
+# supplementary mounts. (MP##) {DEVICE|UUID} @ {PATH|-} @ {KEYFILE|-}
 #
 #	UUIDs can be used in the DEVICE token (avoid lv targets - possibility of dupicate IDs)
 #	note: you MUST use the 'TOPT' var to exclude each of these entries
@@ -82,7 +82,7 @@ MP99="5bc87f37-c60c-452e-a270-ae4c96859332@/arbitrary/path"
 #
 #       default /etc/init.d/SERVICE {restart|stop}, or prefix 'systemd:' for /etc/systemd/system/SERVICE
 #       restarted left to right, stopped right to left. SRVC is always processed *after* MP## entries, 
-#	regardless of it's placement in the file.
+#	      regardless of it's placement in the file.
 #
 SRVC="systemd:maildaemon otherservice"
 ####################
