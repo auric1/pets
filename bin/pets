@@ -738,7 +738,7 @@ revr_() { echo "$@"|awk '{for (revr=NF; revr>1; revr--) printf("%s ",$revr); pri
 killingr_() {
 
 	#generate list of pids in use under supplied target
-	for prox in $(lsof -w -F p "$1") ;do PIDS="$PIDS $(echo "$prox"|cut -c2-)" ;done
+	for prox in $(lsof -w -F p "$1"|grep '^p') ;do PIDS="$PIDS $(echo "$prox"|cut -c2-)" ;done
 
 	#cycle list after duplicates removed, to kill remainders
 	for klll in $(printf '%s\n' "$PIDS"|sort -u) ;do printr_ 19 "$1" "$klll";kill -9 "$klll" ;done; sleep 1
