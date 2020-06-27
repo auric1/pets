@@ -1,7 +1,5 @@
 #TODO
 
--change MNTC token delimiter from : to @ to allow more types of mounts
--change MNTC to multi-line MNT#{###} to clarify complex partition schema
 -change SRVC to auto detect init system, defaulting to systemd
 -develop seperate subroutine for command -v checks
 -develop printing of more errors. less routing to /dev/null
